@@ -39,8 +39,6 @@ export async function sendNP(channel: TextChannel, guildId: string): Promise<Mes
   if (!cur) return null;
 
   let isFav = cur.track.isFavorite || false;
-  // If we don't know the fav status yet (initial state from API was false/unset),
-  // explicitly check it from Emby for accuracy.
   if (!cur.track.isFavorite) {
     const apiFav = await embyClient.isFavorite(cur.track.id).catch(() => false);
     if (apiFav) {
@@ -52,11 +50,10 @@ export async function sendNP(channel: TextChannel, guildId: string): Promise<Mes
   const embed = nowPlayingEmbed(cur.track, calcPosition(guildId), q.volume, cur.requestedBy);
   const rows = getPlaybackButtons(q.isPaused, q.loopMode, isFav);
 
-  // Try to update existing NP message first (avoids duplicate messages)
-  const existing = await resolveMessage(guildId);
-  if (existing) {
-    await existing.edit({ embeds: [embed], components: rows }).catch(() => {});
-    return existing;
+  // Disable old NP message (remove buttons) so it becomes a static history entry
+  const old = await resolveMessage(guildId);
+  if (old) {
+    await old.edit({ components: [] }).catch(() => {});
   }
 
   const msg = await channel.send({ embeds: [embed], components: rows }).catch((e: any) => {
