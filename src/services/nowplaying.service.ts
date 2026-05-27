@@ -39,6 +39,8 @@ export async function sendNP(channel: TextChannel, guildId: string): Promise<Mes
   if (!cur) return null;
 
   const isFav = cur.track.isFavorite || false;
+  // Debug: confirm the initial favorite state
+  logger.debug(`sendNP: ${cur.track.name} fav=${isFav}`);
   const embed = nowPlayingEmbed(cur.track, calcPosition(guildId), q.volume, cur.requestedBy);
   const rows = getPlaybackButtons(q.isPaused, q.loopMode, isFav);
 

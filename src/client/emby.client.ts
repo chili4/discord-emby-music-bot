@@ -73,7 +73,7 @@ export class EmbyClient {
             Recursive: true,
             Limit: limit,
             SortBy: 'SortName',
-            Fields: 'PrimaryImageAspectRatio,BasicSyncInfo',
+            Fields: 'PrimaryImageAspectRatio,BasicSyncInfo,IsFavorite',
           },
         });
         hints = (itemsRes.data.Items || []).map((item: any) => ({

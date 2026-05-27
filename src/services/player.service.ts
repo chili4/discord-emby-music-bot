@@ -84,6 +84,7 @@ export async function playCurrent(guildId: string, channel?: TextChannel) {
     args.push('-ss', String(q.seekOffset));
   }
   args.push(
+    '-re',
     '-i', url,
     '-loglevel', 'warning',
     '-af', `volume=${vol}/100`,
