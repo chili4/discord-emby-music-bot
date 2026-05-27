@@ -196,9 +196,15 @@ function getAudioPlayer(guildId: string): AudioPlayer {
     p.on(AudioPlayerStatus.Idle, async () => {
       const q = getQueue(guildId);
 
-      // Guard: user pressed skip/prev button (handles skipTrack itself)
+      // Guard: user pressed skip/prev button (handles skipTrack itself).
+      // If player went Idle here, it's from the OLD resource's zombie 'end'
+      // listener firing after the new playCurrent. Re-play current track.
       if (q.skipGuard) {
         q.skipGuard = false;
+        if (getCurrentTrack(guildId) && q.connection?.audioPlayer) {
+          logger.debug('Re-playing after zombie Idle transition');
+          await playCurrent(guildId);
+        }
         return;
       }
 
