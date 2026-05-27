@@ -194,8 +194,7 @@ export class EmbyClient {
   }
 
   getStreamUrl(itemId: string, seekSeconds = 0): string {
-    let url = `${config.EMBY_URL}/Audio/${itemId}/stream?api_key=${this.accessToken}&Static=true`;
-    // If seeking, add StartTimeTicks (in 100-ns ticks)
+    let url = `${config.EMBY_URL}/Audio/${itemId}/stream?api_key=${this.accessToken}&Container=mp3`;
     if (seekSeconds > 0) {
       url += `&StartTimeTicks=${seekSeconds * 10_000_000}`;
     }
