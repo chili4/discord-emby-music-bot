@@ -53,23 +53,33 @@ export class EmbyClient {
 
   async search(query: string, limit = 10): Promise<EmbySearchHint[]> {
     try {
-      const res = await this.api.get('/Search/Hints', {
-        params: {
-          SearchTerm: query,
-          Limit: limit,
-          UserId: this.userId,
-          IncludeItemTypes: 'Audio,MusicAlbum,MusicArtist,Playlist',
-        },
-      });
+      const url = `/Search/Hints?SearchTerm=${encodeURIComponent(query)}&Limit=${limit}&UserId=${this.userId}&IncludeItemTypes=Audio%2CMusicAlbum%2CMusicArtist%2CPlaylist`;
+      const res = await this.api.get(url);
+      logger.debug(`Search URL: ${url}`);
 
       const data = res.data;
-      const hints = data.SearchHints || data.Items || [];
+      logger.debug(`Search response keys: ${Object.keys(data).join(', ')}`);
+      logger.debug(`Search response TotalRecordCount: ${data.TotalRecordCount}`);
 
-      return hints
+      const hints = data.SearchHints || data.Items || [];
+      logger.debug(`Raw hints count: ${hints.length}`);
+
+      const types = hints.map((h: any) => h.Type);
+      logger.debug(`Hint types: ${[...new Set(types)].join(', ')}`);
+
+      const filtered = hints
         .filter((h: any) => h.Type === 'Audio' || h.Type === 'MusicAlbum' || h.Type === 'MusicArtist' || h.Type === 'Playlist')
         .slice(0, limit);
+
+      logger.debug(`Filtered hints: ${filtered.length}`);
+      if (filtered.length > 0) logger.debug(`First hint: ${filtered[0].Name} (${filtered[0].Type})`);
+
+      return filtered;
     } catch (err: any) {
-      logger.error('Search failed:', err?.response?.data || err?.message);
+      const detail = err?.response
+        ? `Status ${err.response.status}: ${JSON.stringify(err.response.data).slice(0, 200)}`
+        : err?.message || 'Unknown error';
+      logger.error(`Search failed: ${detail}`);
       return [];
     }
   }

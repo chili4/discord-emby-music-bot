@@ -1,5 +1,6 @@
 import { embyClient } from '../client/emby.client';
 import { Track } from '../models/types';
+import { logger } from '../utils/logger';
 
 export interface SearchResult {
   tracks: Track[];
@@ -41,13 +42,17 @@ export async function searchAndResolve(query: string, type?: number): Promise<Se
 
 export async function searchAutocomplete(query: string, type?: number): Promise<{ name: string; value: string }[]> {
   const targetType = resolveType(type);
+  logger.debug(`autocomplete: query="${query}", type=${type}, targetType=${targetType}`);
   const hints = await embyClient.search(query, 10);
+  logger.debug(`autocomplete: got ${hints.length} hints from search`);
   const filtered = targetType ? hints.filter(h => h.Type === targetType) : hints;
-
-  return filtered.slice(0, 10).map(h => ({
+  logger.debug(`autocomplete: after filter: ${filtered.length} results`);
+  const result = filtered.slice(0, 10).map(h => ({
     name: `${h.Name}${h.Album ? ` - ${h.Album}` : ''} [${h.Type}]`,
     value: h.ItemId || h.Id,
   }));
+  logger.debug(`autocomplete: returning ${result.length} items`);
+  return result;
 }
 
 function resolveType(type?: number): string | null {
