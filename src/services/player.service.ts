@@ -79,9 +79,8 @@ export async function playCurrent(guildId: string, channel?: TextChannel) {
   const args: string[] = [
     '-user_agent', 'VLC/3.0.20',
     '-headers', `X-Emby-Token: ${embyClient.getAccessToken()}\r\n`,
-    '-re',
     '-i', url,
-    '-loglevel', 'warning',
+    '-loglevel', 'debug',
     '-af', `volume=${vol}/100`,
     '-acodec', 'libopus',
     '-f', 'opus',
