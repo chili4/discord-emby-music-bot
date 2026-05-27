@@ -184,20 +184,20 @@ export async function playTracks(
 ) {
   const q = getQueue(guildId);
   const wasEmpty = q.items.length === 0;
+  const playerStopped = q.connection?.audioPlayer?.state?.status !== AudioPlayerStatus.Playing;
+
+  logger.debug(`playTracks: items=${q.items.length}, wasEmpty=${wasEmpty}, isPlaying=${q.isPlaying}, currentIndex=${q.currentIndex}, playerStopped=${playerStopped}`);
 
   for (const t of tracks) {
     q.items.push({ track: t, requestedBy });
   }
 
-  if (wasEmpty) {
-    q.currentIndex = q.items.length - tracks.length; // first of the newly added
-    q.seekOffset = 0;
-    await playCurrent(guildId, channel);
-  } else if (!q.isPlaying && q.currentIndex === -1) {
-    // Edge case: queue has items but player is stopped (e.g., after crash cleanup)
+  if (wasEmpty || playerStopped) {
+    // Start playing the first newly-added track
     q.currentIndex = q.items.length - tracks.length;
     q.seekOffset = 0;
     q.isPlaying = true;
+    q.isPaused = false;
     await playCurrent(guildId, channel);
   } else {
     const msg = await channel.send({

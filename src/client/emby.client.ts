@@ -297,7 +297,9 @@ export class EmbyClient {
   async isFavorite(itemId: string): Promise<boolean> {
     try {
       const res = await this.api.get(`/Users/${this.userId}/Items/${itemId}`);
-      return !!res.data.IsFavorite;
+      const fav = !!res.data.IsFavorite;
+      logger.debug(`isFavorite(${itemId})=${fav} (raw=${res.data.IsFavorite})`);
+      return fav;
     } catch {
       return false;
     }
