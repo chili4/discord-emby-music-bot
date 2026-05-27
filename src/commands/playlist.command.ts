@@ -161,7 +161,10 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
     // Apply sort
     let sorted = [...items];
     if (sort === 'random') {
-      sorted.sort(() => Math.random() - 0.5);
+      for (let i = sorted.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [sorted[i], sorted[j]] = [sorted[j], sorted[i]];
+      }
     } else if (sort === 'name') {
       sorted.sort((a, b) => (a.Name || '').localeCompare(b.Name || ''));
     } else if (sort === 'newest') {
