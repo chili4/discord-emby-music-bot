@@ -297,13 +297,10 @@ export class EmbyClient {
   }
 
   async isFavorite(itemId: string): Promise<boolean> {
+    // HEAD /FavoriteItems/{id} returns 200 if favorited, 404 if not
     try {
-      const res = await this.api.get(`/Users/${this.userId}/Items/${itemId}`, {
-        params: { Fields: 'PrimaryImageAspectRatio,BasicSyncInfo,IsFavorite,DateCreated' },
-      });
-      const fav = !!res.data.IsFavorite;
-      logger.debug(`isFavorite(${itemId})=${fav} (raw=${res.data.IsFavorite})`);
-      return fav;
+      await this.api.head(`/Users/${this.userId}/FavoriteItems/${itemId}`);
+      return true;
     } catch {
       return false;
     }

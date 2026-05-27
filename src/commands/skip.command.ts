@@ -17,12 +17,15 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
     return;
   }
 
+  // Must set skipGuard before stop() to prevent Idle handler from double-skip
+  queue.skipGuard = true;
   if (queue.connection?.audioPlayer) {
     queue.connection.audioPlayer.stop();
   }
 
   const next = skipTrack(guildId);
   if (next) {
+    queue.seekOffset = 0;
     await playCurrent(guildId, interaction.channel as any);
     await interaction.editReply({ embeds: [new EmbedBuilder().setColor(0x57F287).setDescription('⏭️ Skipped')] });
   } else {
