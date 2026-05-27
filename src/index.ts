@@ -90,12 +90,14 @@ async function handleButton(interaction: ButtonInteraction) {
     }
     case 'next': {
       q.skipGuard = true;
+      q.connection?.audioPlayer?.stop();
       const n = skipTrack(g);
       if (n) { q.seekOffset = 0; await playCurrent(g, interaction.channel as any); }
       break;
     }
     case 'prev': {
       q.skipGuard = true;
+      q.connection?.audioPlayer?.stop();
       previousTrack(g);
       q.seekOffset = 0;
       await playCurrent(g, interaction.channel as any);
@@ -110,6 +112,7 @@ async function handleButton(interaction: ButtonInteraction) {
       if (q.isPaused) {
         q.connection!.startTime = Date.now();
       } else {
+        q.connection?.audioPlayer?.stop();
         q.connection!.startTime = Date.now();
         await playCurrent(g, interaction.channel as any);
       }
@@ -125,6 +128,7 @@ async function handleButton(interaction: ButtonInteraction) {
       if (q.isPaused) {
         q.connection!.startTime = Date.now();
       } else {
+        q.connection?.audioPlayer?.stop();
         q.connection!.startTime = Date.now();
         await playCurrent(g, interaction.channel as any);
       }
