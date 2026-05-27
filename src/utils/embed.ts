@@ -67,9 +67,9 @@ export function getPlaybackButtons(
   );
 
   const row2 = new ActionRowBuilder<ButtonBuilder>().addComponents(
-    new ButtonBuilder().setCustomId('rewind').setEmoji('⏪').setLabel('-10s').setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId('rewind').setEmoji('⏪').setLabel('-30s').setStyle(ButtonStyle.Secondary),
     new ButtonBuilder().setCustomId('loop').setEmoji(loopEmoji).setLabel(loopMode === 'none' ? 'Off' : loopMode === 'all' ? 'All' : 'One').setStyle(loopStyle),
-    new ButtonBuilder().setCustomId('forward').setEmoji('⏩').setLabel('+10s').setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId('forward').setEmoji('⏩').setLabel('+30s').setStyle(ButtonStyle.Secondary),
     new ButtonBuilder().setCustomId('fav').setEmoji(isFav ? '❤️' : '🤍').setLabel('Fav').setStyle(ButtonStyle.Secondary),
   );
 

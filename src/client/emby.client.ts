@@ -110,9 +110,7 @@ export class EmbyClient {
 
   async getItem(itemId: string): Promise<EmbyItem | null> {
     try {
-      const res = await this.api.get<EmbyItem>(`/Users/${this.userId}/Items/${itemId}`, {
-        params: { Fields: 'IsFavorite' },
-      });
+      const res = await this.api.get<EmbyItem>(`/Users/${this.userId}/Items/${itemId}`);
       return res.data;
     } catch {
       return null;

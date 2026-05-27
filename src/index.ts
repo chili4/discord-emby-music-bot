@@ -105,7 +105,7 @@ async function handleButton(interaction: ButtonInteraction) {
       if (q.connection?.startTime) {
         q.seekOffset += Math.floor((Date.now() - q.connection.startTime) / 1000);
       }
-      q.seekOffset = Math.max(0, q.seekOffset - 10);
+      q.seekOffset = Math.max(0, q.seekOffset - 30);
       q.skipGuard = true;
       if (q.isPaused) {
         q.connection!.startTime = Date.now();
@@ -120,7 +120,7 @@ async function handleButton(interaction: ButtonInteraction) {
       if (q.connection?.startTime) {
         q.seekOffset += Math.floor((Date.now() - q.connection.startTime) / 1000);
       }
-      q.seekOffset = Math.min((cur?.track.duration || 0) - 1, q.seekOffset + 10);
+      q.seekOffset = Math.min((cur?.track.duration || 0) - 1, q.seekOffset + 30);
       q.skipGuard = true;
       if (q.isPaused) {
         q.connection!.startTime = Date.now();
