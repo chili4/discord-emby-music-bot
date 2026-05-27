@@ -26,6 +26,12 @@ async function registerSlashCommands() {
   }
 }
 
+discordClient.on('debug', (msg) => {
+  if (msg.includes('INTERACTION') || msg.includes('AUTOCOMPLETE') || msg.includes('DISPATCH')) {
+    logger.debug(`[WS] ${msg.slice(0, 200)}`);
+  }
+});
+
 discordClient.once(Events.ClientReady, async () => {
   logger.info(`Logged in as ${discordClient.user!.tag}`);
   await registerSlashCommands();
@@ -44,18 +50,18 @@ discordClient.on(Events.InteractionCreate, async (interaction) => {
       await r({ embeds: [simpleEmbed('An error occurred.', 0xED4245)], ephemeral: true }).catch(() => {});
     }
   } else if (interaction.isAutocomplete()) {
-    logger.debug(`Autocomplete: cmd=${interaction.commandName}`);
+    console.log(`[AUTOCOMPLETE] cmd=${interaction.commandName} user=${interaction.user.tag}`);
     const cmd = commands.get(interaction.commandName);
     if (cmd?.autocomplete) {
       try {
         await cmd.autocomplete(interaction);
-        logger.debug('Autocomplete OK');
+        console.log(`[AUTOCOMPLETE] OK`);
       } catch (e: any) {
-        logger.error(`Autocomplete error: ${e.message}`);
+        console.error(`[AUTOCOMPLETE] Error: ${e.message}`);
         await interaction.respond([]).catch(() => {});
       }
     } else {
-      logger.warn(`No autocomplete handler for ${interaction.commandName}`);
+      console.warn(`[AUTOCOMPLETE] No handler for ${interaction.commandName}`);
     }
   } else if (interaction.isButton()) {
     await handleButton(interaction);
