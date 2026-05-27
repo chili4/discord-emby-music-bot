@@ -79,8 +79,13 @@ export async function playCurrent(guildId: string, channel?: TextChannel) {
   const args: string[] = [
     '-user_agent', 'VLC/3.0.20',
     '-headers', `X-Emby-Token: ${embyClient.getAccessToken()}\r\n`,
+  ];
+  if (q.seekOffset > 0) {
+    args.push('-ss', String(q.seekOffset));
+  }
+  args.push(
     '-i', url,
-    '-loglevel', 'debug',
+    '-loglevel', 'warning',
     '-af', `volume=${vol}/100`,
     '-acodec', 'libopus',
     '-f', 'opus',
@@ -88,7 +93,7 @@ export async function playCurrent(guildId: string, channel?: TextChannel) {
     '-ac', '2',
     '-b:a', '128k',
     'pipe:1',
-  ];
+  );
 
   // Wait for old FFmpeg to fully exit before spawning a new one.
   // This ensures the old resource's internal 'end' listener fires
@@ -144,7 +149,14 @@ export async function playCurrent(guildId: string, channel?: TextChannel) {
   ff.on('exit', (code) => {
     q.lastFfExitCode = code;
     if (code !== 0 && code !== null) {
-      logger.warn(`FF stderr: ${stderrBuf.slice(0, 512)}`);
+      // Log full stderr in chunks if needed
+      if (stderrBuf.length > 1900) {
+        for (let i = 0; i < stderrBuf.length; i += 1500) {
+          logger.warn(`FF stderr[${i}]: ${stderrBuf.slice(i, i + 1500)}`);
+        }
+      } else {
+        logger.warn(`FF stderr: ${stderrBuf}`);
+      }
       q.ffmpegErrorCount++;
       logger.warn(`FF exited ${code} (error #${q.ffmpegErrorCount})`);
       if (q.ffmpegErrorCount >= 3) {
