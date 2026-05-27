@@ -17,6 +17,8 @@ export function getQueue(guildId: string): QueueState {
       npMessageId: null,
       npTimer: null,
       seekOffset: 0,
+      lastFfExitCode: null,
+      ffmpegErrorCount: 0,
     });
   }
   return queues.get(guildId)!;

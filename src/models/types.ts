@@ -81,6 +81,8 @@ export interface QueueState {
   npMessageId: string | null;
   npTimer: NodeJS.Timeout | null;
   seekOffset: number;
+  lastFfExitCode: number | null;
+  ffmpegErrorCount: number;
 }
 
 export interface AudioPlayerConnection {

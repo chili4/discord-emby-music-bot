@@ -192,7 +192,7 @@ export class EmbyClient {
   }
 
   getStreamUrl(itemId: string): string {
-    return `${config.EMBY_URL}/Audio/${itemId}/stream?api_key=${this.accessToken}&Container=mp3`;
+    return `${config.EMBY_URL}/Audio/${itemId}/stream?api_key=${this.accessToken}&Static=true`;
   }
 
   getTranscodeUrl(itemId: string): string {

@@ -47,7 +47,8 @@ function formatAutocompleteHint(hint: EmbySearchHint): { name: string; value: st
   if (artist) label += ` — ${artist}`;
   if (album) label += ` · ${album}`;
   if (label.length > 95) label = label.slice(0, 92) + '...';
-  return { name: label, value: hint.Name.slice(0, 90) };
+  // Send ID||Name as value so play command can look up by ID
+  return { name: label, value: `${hint.ItemId || hint.Id}||${hint.Name.slice(0, 80)}` };
 }
 
 export async function searchAutocomplete(query: string, type?: number): Promise<{ name: string; value: string }[]> {

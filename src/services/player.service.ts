@@ -119,17 +119,28 @@ export async function playCurrent(guildId: string, channel?: TextChannel) {
   startScrobble(guildId);
   startNpTimer(guildId);
 
+  // Reset FFmpeg error tracking on new track
+  q.ffmpegErrorCount = 0;
+
   if (channel) {
     await sendNP(channel, guildId);
   } else {
-    // Auto-advance: update existing NP or send to stored channel
     const storedChannel = await resolveStoredChannel(guildId);
     if (storedChannel) await sendNP(storedChannel, guildId);
   }
 
   ff.on('error', (e) => logger.error(`FF: ${e.message}`));
   ff.on('exit', (code) => {
-    if (code !== 0 && code !== null) logger.debug(`FF exited ${code}`);
+    q.lastFfExitCode = code;
+    if (code !== 0 && code !== null) {
+      q.ffmpegErrorCount++;
+      logger.debug(`FF exited ${code} (error #${q.ffmpegErrorCount})`);
+      // If too many consecutive errors, stop completely to avoid loop
+      if (q.ffmpegErrorCount >= 3) {
+        logger.error('Too many FFmpeg errors, stopping playback');
+        stopAndClear(guildId);
+      }
+    }
     ffmpegProcesses.delete(guildId);
   });
 }
@@ -172,6 +183,25 @@ function getAudioPlayer(guildId: string): AudioPlayer {
 
     p.on(AudioPlayerStatus.Idle, async () => {
       const q = getQueue(guildId);
+
+      // If FFmpeg errored, skip to next track (don't retry same)
+      const isError = q.lastFfExitCode !== null && q.lastFfExitCode !== 0;
+      if (isError) {
+        logger.debug(`FFmpeg error (${q.lastFfExitCode}), skipping to next track`);
+        q.lastFfExitCode = null;
+        const next = skipTrack(guildId);
+        if (next) {
+          await disableNP(guildId);
+          await playCurrent(guildId);
+        } else {
+          q.isPlaying = false;
+          q.isPaused = false;
+          stopScrobble(guildId);
+          stopNpTimer(guildId);
+          await clearNP(guildId);
+        }
+        return;
+      }
 
       if (q.loopMode === 'one') {
         await disableNP(guildId);
