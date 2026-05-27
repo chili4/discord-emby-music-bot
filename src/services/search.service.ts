@@ -52,11 +52,16 @@ function formatAutocompleteHint(hint: EmbySearchHint): { name: string; value: st
 }
 
 export async function searchAutocomplete(query: string, type?: number): Promise<{ name: string; value: string }[]> {
-  if (!query || query.length < 2) return [];
+  if (!query || query.length < 2) {
+    logger.debug(`autocomplete: query "${query}" too short`);
+    return [];
+  }
 
   const targetType = resolveType(type);
   const hints = await embyClient.search(query, 10);
+  logger.debug(`autocomplete: "${query}" → ${hints.length} hints`);
   const filtered = targetType ? hints.filter(h => h.Type === targetType) : hints;
+  logger.debug(`autocomplete: filtered → ${filtered.length}`);
 
   return filtered.slice(0, 10).map(formatAutocompleteHint);
 }

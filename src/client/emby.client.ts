@@ -56,14 +56,16 @@ export class EmbyClient {
       let hints: EmbySearchHint[] = [];
 
       const searchUrl = `/Search/Hints?SearchTerm=${encodeURIComponent(query)}&Limit=${limit}&UserId=${this.userId}&IncludeItemTypes=Audio%2CMusicAlbum%2CMusicArtist%2CPlaylist`;
+      logger.debug(`Search: GET ${searchUrl.slice(0, 150)}`);
       const res = await this.api.get(searchUrl);
       const data = res.data;
+      logger.debug(`Search: status=${res.status}, keys=${Object.keys(data).join(',')}`);
       const searchHints = data.SearchHints || data.Items || [];
 
       if (searchHints.length > 0) {
         hints = searchHints;
       } else {
-        logger.debug('/Search/Hints returned empty, trying /Items fallback');
+        logger.debug('/Search/Hints empty, fallback to /Items');
         const itemsRes = await this.api.get(`/Users/${this.userId}/Items`, {
           params: {
             SearchTerm: query,

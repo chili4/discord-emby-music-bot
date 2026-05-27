@@ -42,9 +42,18 @@ discordClient.on(Events.InteractionCreate, async (interaction) => {
       await r({ embeds: [simpleEmbed('An error occurred.', 0xED4245)], ephemeral: true }).catch(() => {});
     }
   } else if (interaction.isAutocomplete()) {
+    logger.debug(`Autocomplete: cmd=${interaction.commandName}`);
     const cmd = commands.get(interaction.commandName);
     if (cmd?.autocomplete) {
-      try { await cmd.autocomplete(interaction); } catch { await interaction.respond([]).catch(() => {}); }
+      try {
+        await cmd.autocomplete(interaction);
+        logger.debug('Autocomplete OK');
+      } catch (e: any) {
+        logger.error(`Autocomplete error: ${e.message}`);
+        await interaction.respond([]).catch(() => {});
+      }
+    } else {
+      logger.warn(`No autocomplete handler for ${interaction.commandName}`);
     }
   } else if (interaction.isButton()) {
     await handleButton(interaction);
