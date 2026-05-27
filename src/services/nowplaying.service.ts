@@ -38,8 +38,16 @@ export async function sendNP(channel: TextChannel, guildId: string): Promise<Mes
   const cur = getCurrentTrack(guildId);
   if (!cur) return null;
 
-  const isFav = cur.track.isFavorite || false;
-  // Debug: confirm the initial favorite state
+  let isFav = cur.track.isFavorite || false;
+  // If we don't know the fav status yet (initial state from API was false/unset),
+  // explicitly check it from Emby for accuracy.
+  if (!cur.track.isFavorite) {
+    const apiFav = await embyClient.isFavorite(cur.track.id).catch(() => false);
+    if (apiFav) {
+      cur.track.isFavorite = true;
+      isFav = true;
+    }
+  }
   logger.debug(`sendNP: ${cur.track.name} fav=${isFav}`);
   const embed = nowPlayingEmbed(cur.track, calcPosition(guildId), q.volume, cur.requestedBy);
   const rows = getPlaybackButtons(q.isPaused, q.loopMode, isFav);
