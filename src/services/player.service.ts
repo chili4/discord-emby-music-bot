@@ -80,11 +80,8 @@ export async function playCurrent(guildId: string, channel?: TextChannel) {
 
   const vol = Math.round(Math.pow(q.volume / 100, 0.6) * 100);
   const args: string[] = [
-    '-headers', `X-Emby-Token: ${embyClient.getAccessToken()}`,
-  ];
-  args.push(
+    '-re',
     '-i', url,
-    '-analyzeduration', '0',
     '-loglevel', '0',
     '-af', `volume=${vol}/100`,
     '-acodec', 'libopus',
@@ -93,7 +90,7 @@ export async function playCurrent(guildId: string, channel?: TextChannel) {
     '-ac', '2',
     '-b:a', '128k',
     'pipe:1',
-  );
+  ];
 
   // Kill old FFmpeg if exists
   const oldFf = ffmpegProcesses.get(guildId);

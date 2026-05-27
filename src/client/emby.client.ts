@@ -194,7 +194,8 @@ export class EmbyClient {
   }
 
   getStreamUrl(itemId: string): string {
-    return `${config.EMBY_URL}/Audio/${itemId}/stream?api_key=${this.accessToken}&Static=true`;
+    // Without Static=true, Emby will transcode/serve in the file's native format
+    return `${config.EMBY_URL}/Audio/${itemId}/stream?api_key=${this.accessToken}&Container=mp3`;
   }
 
   getTranscodeUrl(itemId: string): string {
@@ -211,6 +212,7 @@ export class EmbyClient {
       duration: ticksToSeconds(hint.RunTimeTicks || 0),
       imageTag: hint.PrimaryImageTag || hint.ImageTags?.Primary || null,
       type: this.mapType(hint.Type),
+      isFavorite: !!hint.IsFavorite,
     };
   }
 
@@ -225,6 +227,7 @@ export class EmbyClient {
       imageTag: item.ImageTags?.Primary || null,
       type: this.mapType(item.Type),
       playlistItemId: item.PlaylistItemId,
+      isFavorite: !!item.IsFavorite,
     };
   }
 

@@ -61,6 +61,7 @@ export interface Track {
   imageTag: string | null;
   type: 'audio' | 'album' | 'playlist' | 'artist';
   playlistItemId?: string;
+  isFavorite?: boolean;
 }
 
 export interface QueueItem {

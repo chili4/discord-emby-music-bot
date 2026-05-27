@@ -2,6 +2,7 @@ import { TextChannel, Message, ActionRowBuilder, ButtonBuilder, ComponentType, A
 import { logger } from '../utils/logger';
 import { getQueue, getCurrentTrack } from './queue.service';
 import { nowPlayingEmbed, getPlaybackButtons } from '../utils/embed';
+import { embyClient } from '../client/emby.client';
 
 async function resolveChannel(guildId: string): Promise<TextChannel | null> {
   const q = getQueue(guildId);
@@ -37,8 +38,16 @@ export async function sendNP(channel: TextChannel, guildId: string): Promise<Mes
   const cur = getCurrentTrack(guildId);
   if (!cur) return null;
 
+  const isFav = cur.track.isFavorite || false;
   const embed = nowPlayingEmbed(cur.track, calcPosition(guildId), q.volume, cur.requestedBy);
-  const rows = getPlaybackButtons(q.isPaused, q.loopMode, false);
+  const rows = getPlaybackButtons(q.isPaused, q.loopMode, isFav);
+
+  // Try to update existing NP message first (avoids duplicate messages)
+  const existing = await resolveMessage(guildId);
+  if (existing) {
+    await existing.edit({ embeds: [embed], components: rows }).catch(() => {});
+    return existing;
+  }
 
   const msg = await channel.send({ embeds: [embed], components: rows }).catch((e: any) => {
     logger.error(`sendNP failed: ${e.message}`);
@@ -64,8 +73,11 @@ export async function updateNP(guildId: string): Promise<void> {
     return;
   }
 
+  // Check favorite status periodically
+  const isFav = await embyClient.isFavorite(cur.track.id).catch(() => false);
+
   const embed = nowPlayingEmbed(cur.track, calcPosition(guildId), q.volume, cur.requestedBy);
-  const rows = getPlaybackButtons(q.isPaused, q.loopMode, false);
+  const rows = getPlaybackButtons(q.isPaused, q.loopMode, isFav);
   await msg.edit({ embeds: [embed], components: rows }).catch(() => {});
 }
 
