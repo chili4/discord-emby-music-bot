@@ -53,26 +53,46 @@ export class EmbyClient {
 
   async search(query: string, limit = 10): Promise<EmbySearchHint[]> {
     try {
-      const url = `/Search/Hints?SearchTerm=${encodeURIComponent(query)}&Limit=${limit}&UserId=${this.userId}&IncludeItemTypes=Audio%2CMusicAlbum%2CMusicArtist%2CPlaylist`;
-      const res = await this.api.get(url);
-      logger.debug(`Search URL: ${url}`);
+      let hints: EmbySearchHint[] = [];
 
+      const searchUrl = `/Search/Hints?SearchTerm=${encodeURIComponent(query)}&Limit=${limit}&UserId=${this.userId}&IncludeItemTypes=Audio%2CMusicAlbum%2CMusicArtist%2CPlaylist`;
+      const res = await this.api.get(searchUrl);
       const data = res.data;
-      logger.debug(`Search response keys: ${Object.keys(data).join(', ')}`);
-      logger.debug(`Search response TotalRecordCount: ${data.TotalRecordCount}`);
+      const searchHints = data.SearchHints || data.Items || [];
 
-      const hints = data.SearchHints || data.Items || [];
-      logger.debug(`Raw hints count: ${hints.length}`);
-
-      const types = hints.map((h: any) => h.Type);
-      logger.debug(`Hint types: ${[...new Set(types)].join(', ')}`);
+      if (searchHints.length > 0) {
+        hints = searchHints;
+      } else {
+        logger.debug('/Search/Hints returned empty, trying /Items fallback');
+        const itemsRes = await this.api.get(`/Users/${this.userId}/Items`, {
+          params: {
+            SearchTerm: query,
+            IncludeItemTypes: 'Audio,MusicAlbum,MusicArtist,Playlist',
+            Recursive: true,
+            Limit: limit,
+            SortBy: 'SortName',
+          },
+        });
+        hints = (itemsRes.data.Items || []).map((item: any) => ({
+          ItemId: item.Id,
+          Id: item.Id,
+          Name: item.Name,
+          Type: item.Type,
+          RunTimeTicks: item.RunTimeTicks,
+          PrimaryImageTag: item.ImageTags?.Primary,
+          AlbumArtist: item.AlbumArtist,
+          Album: item.Album,
+          Artists: item.Artists,
+          AlbumId: item.AlbumId,
+          ImageTags: item.ImageTags,
+          ProductionYear: item.ProductionYear,
+        }));
+        logger.debug(`Items fallback returned ${hints.length} results`);
+      }
 
       const filtered = hints
         .filter((h: any) => h.Type === 'Audio' || h.Type === 'MusicAlbum' || h.Type === 'MusicArtist' || h.Type === 'Playlist')
         .slice(0, limit);
-
-      logger.debug(`Filtered hints: ${filtered.length}`);
-      if (filtered.length > 0) logger.debug(`First hint: ${filtered[0].Name} (${filtered[0].Type})`);
 
       return filtered;
     } catch (err: any) {
