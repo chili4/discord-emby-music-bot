@@ -110,9 +110,12 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
     }
   }
 
+  const qWasEmpty = getQueue(guildId).items.length === 0;
   await playTracks(guildId, tracksToPlay, interaction.user.id, interaction.channel as any);
   const count = tracksToPlay.length;
-  const desc = count > 1 ? `✅ Playing **${first.name}** (${count} tracks)` : `✅ Playing **${first.name}**`;
+  const desc = qWasEmpty
+    ? (count > 1 ? `✅ Playing **${first.name}** (${count} tracks)` : `✅ Playing **${first.name}**`)
+    : `✅ **${first.name}** added to queue`;
   await interaction.editReply({ embeds: [new EmbedBuilder().setColor(0x57F287).setDescription(desc)] });
   const q = getQueue(guildId);
   q.npChannelId = q.npChannelId || interaction.channelId;

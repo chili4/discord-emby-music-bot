@@ -72,10 +72,7 @@ export async function playCurrent(guildId: string, channel?: TextChannel) {
     return;
   }
 
-  // CRITICAL: reset seekOffset on every new track playback
-  q.seekOffset = 0;
-
-  const url = embyClient.getStreamUrl(cur.track.id);
+  const url = embyClient.getStreamUrl(cur.track.id, q.seekOffset);
   logger.debug(`Playing: ${cur.track.name} (id=${cur.track.id})`);
 
   const vol = Math.round(Math.pow(q.volume / 100, 0.6) * 100);
@@ -172,6 +169,7 @@ export async function playTracks(
 
   if (wasEmpty) {
     q.currentIndex = 0;
+    q.seekOffset = 0;
     await playCurrent(guildId, channel);
   } else {
     const msg = await channel.send({
@@ -202,11 +200,14 @@ function getAudioPlayer(guildId: string): AudioPlayer {
         q.lastFfExitCode = null;
         const next = skipTrack(guildId);
         if (next) {
+          q.seekOffset = 0;
           await disableNP(guildId);
           await playCurrent(guildId);
         } else {
           q.isPlaying = false;
           q.isPaused = false;
+          q.items = [];
+          q.currentIndex = -1;
           stopScrobble(guildId);
           stopNpTimer(guildId);
           await clearNP(guildId);
@@ -215,6 +216,7 @@ function getAudioPlayer(guildId: string): AudioPlayer {
       }
 
       if (q.loopMode === 'one') {
+        q.seekOffset = 0;
         await disableNP(guildId);
         await playCurrent(guildId);
         return;
@@ -222,11 +224,14 @@ function getAudioPlayer(guildId: string): AudioPlayer {
 
       const next = skipTrack(guildId);
       if (next) {
+        q.seekOffset = 0;
         await disableNP(guildId);
         await playCurrent(guildId);
       } else {
         q.isPlaying = false;
         q.isPaused = false;
+        q.items = [];
+        q.currentIndex = -1;
         stopScrobble(guildId);
         stopNpTimer(guildId);
         await clearNP(guildId);
@@ -237,6 +242,7 @@ function getAudioPlayer(guildId: string): AudioPlayer {
       logger.error(`AP: ${e.message}`);
       const qq = getQueue(guildId);
       if (!qq.skipGuard) {
+        qq.seekOffset = 0;
         const next = skipTrack(guildId);
         if (next) playCurrent(guildId);
       }

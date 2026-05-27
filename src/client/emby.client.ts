@@ -193,8 +193,13 @@ export class EmbyClient {
     }
   }
 
-  getStreamUrl(itemId: string): string {
-    return `${config.EMBY_URL}/Audio/${itemId}/stream?api_key=${this.accessToken}&Static=true`;
+  getStreamUrl(itemId: string, seekSeconds = 0): string {
+    let url = `${config.EMBY_URL}/Audio/${itemId}/stream?api_key=${this.accessToken}&Static=true`;
+    // If seeking, add StartTimeTicks (in 100-ns ticks)
+    if (seekSeconds > 0) {
+      url += `&StartTimeTicks=${seekSeconds * 10_000_000}`;
+    }
+    return url;
   }
 
   getTranscodeUrl(itemId: string): string {
