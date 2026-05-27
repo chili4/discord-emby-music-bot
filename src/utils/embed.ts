@@ -2,6 +2,7 @@ import { EmbedBuilder, ButtonBuilder, ButtonStyle, ActionRowBuilder } from 'disc
 import { Track } from '../models/types';
 import { config } from '../config';
 import { embyClient } from '../client/emby.client';
+import { logger } from './logger';
 
 const COLOR = 0x2B2D31;
 
@@ -9,8 +10,11 @@ function imgUrl(track: Track): string | null {
   if (track.imageTag && track.id) {
     const base = config.EMBY_PUBLIC_URL || config.EMBY_URL;
     const token = embyClient.getAccessToken();
-    return `${base}/Items/${track.id}/Images/Primary?tag=${track.imageTag}&quality=90&fillHeight=600&fillWidth=600&api_key=${token}`;
+    const url = `${base}/Items/${track.id}/Images/Primary?tag=${track.imageTag}&quality=90&fillHeight=600&fillWidth=600&api_key=${token}`;
+    logger.debug(`imgUrl: ${url.slice(0, 200)}`);
+    return url;
   }
+  logger.debug(`imgUrl: no imageTag or id for ${track.name}`);
   return null;
 }
 
