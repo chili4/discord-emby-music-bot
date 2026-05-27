@@ -20,6 +20,7 @@ export function getQueue(guildId: string): QueueState {
       lastFfExitCode: null,
       ffmpegErrorCount: 0,
       skipGuard: false,
+      processingEnd: false,
     });
   }
   return queues.get(guildId)!;

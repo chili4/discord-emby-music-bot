@@ -72,6 +72,9 @@ export async function playCurrent(guildId: string, channel?: TextChannel) {
     return;
   }
 
+  // Clear reentry guard in case it was left set (e.g., initial play, no old FFmpeg)
+  q.processingEnd = false;
+
   const url = embyClient.getStreamUrl(cur.track.id, q.seekOffset);
   logger.debug(`Playing: ${cur.track.name} (id=${cur.track.id})`);
 
@@ -98,7 +101,7 @@ export async function playCurrent(guildId: string, channel?: TextChannel) {
 
   // Wait for old FFmpeg to fully exit before spawning a new one.
   // This ensures the old resource's internal 'end' listener fires
-  // while the player is Idle (from player.stop()), not while Playing.
+  // while the player is Idle, not while Playing (prevents zombie listener).
   const oldFf = ffmpegProcesses.get(guildId);
   if (oldFf) {
     ffmpegProcesses.delete(guildId);
@@ -107,6 +110,9 @@ export async function playCurrent(guildId: string, channel?: TextChannel) {
       await new Promise<void>(resolve => oldFf.once('exit', () => resolve()));
     }
   }
+  // Reentry guard cleared: any zombie Idle during the await was discarded,
+  // subsequent Idle events (new FFmpeg crash, etc.) can be processed normally.
+  q.processingEnd = false;
 
   const ff = spawn('ffmpeg', args, { stdio: ['pipe', 'pipe', 'pipe'] });
   ffmpegProcesses.set(guildId, ff);
@@ -219,10 +225,16 @@ function getAudioPlayer(guildId: string): AudioPlayer {
     p.on(AudioPlayerStatus.Idle, async () => {
       const q = getQueue(guildId);
 
+      // Reentry guard: prevents zombie 'end' listener from a previous resource
+      // from double-processing after a natural track end.
+      if (q.processingEnd) return;
+      q.processingEnd = true;
+
       // Guard: user pressed skip/prev button (handles skipTrack itself).
       // The button handler's playCurrent will re-start after oldFf.kill await completes.
       if (q.skipGuard) {
         q.skipGuard = false;
+        q.processingEnd = false;
         return;
       }
 
@@ -245,6 +257,7 @@ function getAudioPlayer(guildId: string): AudioPlayer {
           stopNpTimer(guildId);
           await clearNP(guildId);
         }
+        q.processingEnd = false;
         return;
       }
 
@@ -252,6 +265,7 @@ function getAudioPlayer(guildId: string): AudioPlayer {
         q.seekOffset = 0;
         await disableNP(guildId);
         await playCurrent(guildId);
+        q.processingEnd = false;
         return;
       }
 
@@ -269,6 +283,7 @@ function getAudioPlayer(guildId: string): AudioPlayer {
         stopNpTimer(guildId);
         await clearNP(guildId);
       }
+      q.processingEnd = false;
     });
 
     p.on('error', (e) => {
