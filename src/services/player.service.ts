@@ -91,18 +91,22 @@ export async function playCurrent(guildId: string, channel?: TextChannel) {
     'pipe:1',
   ];
 
-  // Kill old FFmpeg if exists — remove listeners FIRST to prevent
-  // @discordjs/voice's internal 'end' listener from transitioning
-  // the still-playing player to Idle after we set up the new resource.
+  // Wait for old FFmpeg to fully exit before spawning a new one.
+  // This ensures the old resource's internal 'end' listener fires
+  // while the player is Idle (from player.stop()), not while Playing.
   const oldFf = ffmpegProcesses.get(guildId);
   if (oldFf) {
-    try { oldFf.stdout?.removeAllListeners(); } catch {}
-    oldFf.kill();
     ffmpegProcesses.delete(guildId);
+    if (oldFf.exitCode === null && oldFf.signalCode === null) {
+      oldFf.kill();
+      await new Promise<void>(resolve => oldFf.once('exit', () => resolve()));
+    }
   }
 
   const ff = spawn('ffmpeg', args, { stdio: ['pipe', 'pipe', 'pipe'] });
   ffmpegProcesses.set(guildId, ff);
+
+  ff.stdout?.on('error', () => {}); // Prevent ERR_STREAM_PREMATURE_CLOSE crash
 
   let stderrBuf = '';
   ff.stderr?.on('data', (d: Buffer) => {
