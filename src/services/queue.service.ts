@@ -19,6 +19,7 @@ export function getQueue(guildId: string): QueueState {
       seekOffset: 0,
       lastFfExitCode: null,
       ffmpegErrorCount: 0,
+      skipGuard: false,
     });
   }
   return queues.get(guildId)!;

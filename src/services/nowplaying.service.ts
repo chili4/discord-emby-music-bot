@@ -61,7 +61,7 @@ export async function sendNP(channel: TextChannel, guildId: string): Promise<Mes
   return msg;
 }
 
-export async function updateNP(guildId: string): Promise<void> {
+export async function updateNP(guildId: string, overrideFav?: boolean): Promise<void> {
   const q = getQueue(guildId);
   const cur = getCurrentTrack(guildId);
   if (!cur || !q.npMessageId) return;
@@ -73,8 +73,7 @@ export async function updateNP(guildId: string): Promise<void> {
     return;
   }
 
-  // Check favorite status periodically
-  const isFav = await embyClient.isFavorite(cur.track.id).catch(() => false);
+  const isFav = overrideFav ?? (cur.track.isFavorite || false);
 
   const embed = nowPlayingEmbed(cur.track, calcPosition(guildId), q.volume, cur.requestedBy);
   const rows = getPlaybackButtons(q.isPaused, q.loopMode, isFav);

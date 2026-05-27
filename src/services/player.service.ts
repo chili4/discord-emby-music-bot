@@ -80,9 +80,11 @@ export async function playCurrent(guildId: string, channel?: TextChannel) {
 
   const vol = Math.round(Math.pow(q.volume / 100, 0.6) * 100);
   const args: string[] = [
+    '-user_agent', 'VLC/3.0.20',
+    '-headers', `X-Emby-Token: ${embyClient.getAccessToken()}\r\n`,
     '-re',
     '-i', url,
-    '-loglevel', '0',
+    '-loglevel', 'warning',
     '-af', `volume=${vol}/100`,
     '-acodec', 'libopus',
     '-f', 'opus',
@@ -98,6 +100,12 @@ export async function playCurrent(guildId: string, channel?: TextChannel) {
 
   const ff = spawn('ffmpeg', args, { stdio: ['pipe', 'pipe', 'pipe'] });
   ffmpegProcesses.set(guildId, ff);
+
+  let stderrBuf = '';
+  ff.stderr?.on('data', (d: Buffer) => {
+    stderrBuf += d.toString();
+    if (stderrBuf.length > 2048) stderrBuf = stderrBuf.slice(-1024);
+  });
 
   const res = createAudioResource(ff.stdout, { inlineVolume: false });
   const player = getAudioPlayer(guildId);
@@ -130,9 +138,9 @@ export async function playCurrent(guildId: string, channel?: TextChannel) {
   ff.on('exit', (code) => {
     q.lastFfExitCode = code;
     if (code !== 0 && code !== null) {
+      logger.warn(`FF stderr: ${stderrBuf.slice(0, 512)}`);
       q.ffmpegErrorCount++;
-      logger.debug(`FF exited ${code} (error #${q.ffmpegErrorCount})`);
-      // If too many consecutive errors, stop completely to avoid loop
+      logger.warn(`FF exited ${code} (error #${q.ffmpegErrorCount})`);
       if (q.ffmpegErrorCount >= 3) {
         logger.error('Too many FFmpeg errors, stopping playback');
         stopAndClear(guildId);
@@ -181,6 +189,12 @@ function getAudioPlayer(guildId: string): AudioPlayer {
     p.on(AudioPlayerStatus.Idle, async () => {
       const q = getQueue(guildId);
 
+      // Guard: user pressed skip/prev button (handles skipTrack itself)
+      if (q.skipGuard) {
+        q.skipGuard = false;
+        return;
+      }
+
       // If FFmpeg errored, skip to next track (don't retry same)
       const isError = q.lastFfExitCode !== null && q.lastFfExitCode !== 0;
       if (isError) {
@@ -221,8 +235,11 @@ function getAudioPlayer(guildId: string): AudioPlayer {
 
     p.on('error', (e) => {
       logger.error(`AP: ${e.message}`);
-      const next = skipTrack(guildId);
-      if (next) playCurrent(guildId);
+      const qq = getQueue(guildId);
+      if (!qq.skipGuard) {
+        const next = skipTrack(guildId);
+        if (next) playCurrent(guildId);
+      }
     });
   }
   return players.get(guildId)!;

@@ -84,6 +84,7 @@ export interface QueueState {
   seekOffset: number;
   lastFfExitCode: number | null;
   ffmpegErrorCount: number;
+  skipGuard: boolean;
 }
 
 export interface AudioPlayerConnection {

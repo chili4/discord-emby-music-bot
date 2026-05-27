@@ -89,15 +89,17 @@ async function handleButton(interaction: ButtonInteraction) {
       break;
     }
     case 'next': {
-      q.connection?.audioPlayer?.stop();
+      q.skipGuard = true;
+      q.connection?.audioPlayer?.stop(true);
       const n = skipTrack(g);
       if (n) { q.seekOffset = 0; await playCurrent(g, interaction.channel as any); }
       break;
     }
     case 'prev': {
+      q.skipGuard = true;
+      q.connection?.audioPlayer?.stop(true);
       previousTrack(g);
       q.seekOffset = 0;
-      q.connection?.audioPlayer?.stop();
       await playCurrent(g, interaction.channel as any);
       break;
     }
@@ -106,10 +108,11 @@ async function handleButton(interaction: ButtonInteraction) {
         q.seekOffset += Math.floor((Date.now() - q.connection.startTime) / 1000);
       }
       q.seekOffset = Math.max(0, q.seekOffset - 10);
+      q.skipGuard = true;
       if (q.isPaused) {
         q.connection!.startTime = Date.now();
       } else {
-        q.connection?.audioPlayer?.stop();
+        q.connection?.audioPlayer?.stop(true);
         q.connection!.startTime = Date.now();
         await playCurrent(g, interaction.channel as any);
       }
@@ -121,10 +124,11 @@ async function handleButton(interaction: ButtonInteraction) {
         q.seekOffset += Math.floor((Date.now() - q.connection.startTime) / 1000);
       }
       q.seekOffset = Math.min((cur?.track.duration || 0) - 1, q.seekOffset + 10);
+      q.skipGuard = true;
       if (q.isPaused) {
         q.connection!.startTime = Date.now();
       } else {
-        q.connection?.audioPlayer?.stop();
+        q.connection?.audioPlayer?.stop(true);
         q.connection!.startTime = Date.now();
         await playCurrent(g, interaction.channel as any);
       }
@@ -137,7 +141,14 @@ async function handleButton(interaction: ButtonInteraction) {
     }
     case 'fav': {
       const cur = getCurrentTrack(g);
-      if (cur) await embyClient.toggleFavorite(cur.track.id);
+      if (cur) {
+        await embyClient.toggleFavorite(cur.track.id);
+        const isFav = await embyClient.isFavorite(cur.track.id).catch(() => false);
+        cur.track.isFavorite = isFav;
+        await updateNP(g, isFav);
+        await interaction.editReply({}).catch(() => {});
+        return;
+      }
       break;
     }
     case 'loop': {

@@ -194,8 +194,7 @@ export class EmbyClient {
   }
 
   getStreamUrl(itemId: string): string {
-    // Without Static=true, Emby will transcode/serve in the file's native format
-    return `${config.EMBY_URL}/Audio/${itemId}/stream?api_key=${this.accessToken}&Container=mp3`;
+    return `${config.EMBY_URL}/Audio/${itemId}/stream?api_key=${this.accessToken}&Static=true`;
   }
 
   getTranscodeUrl(itemId: string): string {

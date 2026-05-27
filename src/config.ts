@@ -8,6 +8,7 @@ const configSchema = z.object({
   EMBY_URL: z.string().url('EMBY_URL must be a valid URL'),
   EMBY_USERNAME: z.string().min(1, 'EMBY_USERNAME is required'),
   EMBY_PASSWORD: z.string().min(1, 'EMBY_PASSWORD is required'),
+  EMBY_PUBLIC_URL: z.string().url().optional(),
   LOG_LEVEL: z.enum(['error', 'warn', 'info', 'debug']).default('info'),
 });
 
