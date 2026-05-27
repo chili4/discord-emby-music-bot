@@ -150,19 +150,23 @@ export async function playCurrent(guildId: string, channel?: TextChannel) {
   ff.on('exit', (code) => {
     q.lastFfExitCode = code;
     if (code !== 0 && code !== null) {
-      // Log full stderr in chunks if needed
-      if (stderrBuf.length > 1900) {
-        for (let i = 0; i < stderrBuf.length; i += 1500) {
-          logger.warn(`FF stderr[${i}]: ${stderrBuf.slice(i, i + 1500)}`);
-        }
+      // If skipGuard is true, this FFmpeg was killed intentionally — not an error
+      if (q.skipGuard) {
+        logger.debug(`FF killed (exit ${code}) — expected during skip`);
       } else {
-        logger.warn(`FF stderr: ${stderrBuf}`);
-      }
-      q.ffmpegErrorCount++;
-      logger.warn(`FF exited ${code} (error #${q.ffmpegErrorCount})`);
-      if (q.ffmpegErrorCount >= 3) {
-        logger.error('Too many FFmpeg errors, stopping playback');
-        stopAndClear(guildId);
+        if (stderrBuf.length > 1900) {
+          for (let i = 0; i < stderrBuf.length; i += 1500) {
+            logger.warn(`FF stderr[${i}]: ${stderrBuf.slice(i, i + 1500)}`);
+          }
+        } else {
+          logger.warn(`FF stderr: ${stderrBuf}`);
+        }
+        q.ffmpegErrorCount++;
+        logger.warn(`FF exited ${code} (error #${q.ffmpegErrorCount})`);
+        if (q.ffmpegErrorCount >= 3) {
+          logger.error('Too many FFmpeg errors, stopping playback');
+          stopAndClear(guildId);
+        }
       }
     }
     ffmpegProcesses.delete(guildId);
