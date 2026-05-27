@@ -1,13 +1,15 @@
 import { EmbedBuilder, ButtonBuilder, ButtonStyle, ActionRowBuilder } from 'discord.js';
 import { Track } from '../models/types';
 import { config } from '../config';
+import { embyClient } from '../client/emby.client';
 
 const COLOR = 0x2B2D31;
 
 function imgUrl(track: Track): string | null {
   if (track.imageTag && track.id) {
     const base = config.EMBY_PUBLIC_URL || config.EMBY_URL;
-    return `${base}/Items/${track.id}/Images/Primary?tag=${track.imageTag}&quality=90&fillHeight=600&fillWidth=600`;
+    const token = embyClient.getAccessToken();
+    return `${base}/Items/${track.id}/Images/Primary?tag=${track.imageTag}&quality=90&fillHeight=600&fillWidth=600&api_key=${token}`;
   }
   return null;
 }
