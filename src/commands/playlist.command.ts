@@ -191,10 +191,21 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
 }
 
 export async function autocomplete(interaction: AutocompleteInteraction): Promise<void> {
-  const focused = interaction.options.getFocused();
+  const focused = interaction.options.getFocused().toLowerCase();
+  const results: { name: string; value: string }[] = [];
+
+  // Always suggest "favorites" if it matches
+  if ('favorites'.includes(focused)) {
+    results.push({ name: '⭐ Favorites', value: 'favorites' });
+  }
+
   const playlists = await embyClient.getPlaylists();
-  const filtered = playlists
-    .filter(p => p.Name.toLowerCase().includes(focused.toLowerCase()))
-    .slice(0, 10);
-  await interaction.respond(filtered.map(p => ({ name: p.Name, value: p.Name })));
+  for (const p of playlists) {
+    if (p.Name.toLowerCase().includes(focused)) {
+      results.push({ name: p.Name, value: p.Name });
+      if (results.length >= 10) break;
+    }
+  }
+
+  await interaction.respond(results.slice(0, 10));
 }
