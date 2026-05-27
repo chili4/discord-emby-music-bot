@@ -9,4 +9,5 @@ services:
       - EMBY_URL=${EMBY_URL:-http://localhost:8096}
       - EMBY_USERNAME=${EMBY_USERNAME}
       - EMBY_PASSWORD=${EMBY_PASSWORD}
+      - EMBY_PUBLIC_URL=${EMBY_PUBLIC_URL}
       - LOG_LEVEL=${LOG_LEVEL:-info}
