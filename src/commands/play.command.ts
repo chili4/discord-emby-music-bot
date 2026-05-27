@@ -63,7 +63,7 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
   if (itemId && /^\d+$/.test(itemId)) {
     // Look up by exact ID
     const item = await embyClient.getItem(itemId);
-    logger.debug(`getItem(${itemId}): IsFavorite=${item?.IsFavorite}, type=${item?.Type}`);
+    if (item?.IsFavorite) logger.debug(`getItem ${itemId}: IsFavorite=true`);
     if (item && item.Type === 'Audio') {
       tracksToPlay = [embyClient.itemToTrack(item)];
     } else if (item && item.Type === 'MusicAlbum') {
