@@ -56,17 +56,23 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
     return;
   }
 
-  if (next && result.tracks.length === 1) {
-    const track = result.tracks[0];
-    addTrackNext(guildId, track, interaction.user.id);
-    await interaction.editReply({ embeds: [new EmbedBuilder().setColor(0x57F287).setDescription(`✅ **${track.name}** will play next`)] });
+  const tracksToPlay = result.type === 'list' && result.tracks.length > 1
+    ? [result.tracks[0]]
+    : result.tracks;
+
+  const first = tracksToPlay[0];
+
+  if (next) {
+    addTrackNext(guildId, first, interaction.user.id);
+    await interaction.editReply({ embeds: [new EmbedBuilder().setColor(0x57F287).setDescription(`✅ **${first.name}** will play next`)] });
     return;
   }
 
-  logger.debug(`Playing ${result.tracks.length} tracks`);
-  await playTracks(guildId, result.tracks, interaction.user.id, interaction.channel as any);
-  const count = result.tracks.length;
-  await interaction.editReply({ embeds: [new EmbedBuilder().setColor(0x57F287).setDescription(`✅ Enqueued **${count}** track${count > 1 ? 's' : ''} (${result.type})`)] });
+  logger.debug(`Playing ${tracksToPlay.length} tracks`);
+  await playTracks(guildId, tracksToPlay, interaction.user.id, interaction.channel as any);
+  const count = tracksToPlay.length;
+  const label = result.type === 'album' ? 'album' : result.type === 'playlist' ? 'playlist' : result.type === 'artist' ? 'artist' : 'track';
+  await interaction.editReply({ embeds: [new EmbedBuilder().setColor(0x57F287).setDescription(`✅ Playing **${first.name}**` + (count > 1 ? ` (${count} tracks)` : ''))] });
   logger.debug('Play command completed');
 }
 
