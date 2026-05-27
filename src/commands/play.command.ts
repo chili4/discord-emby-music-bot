@@ -18,21 +18,27 @@ export const data = new SlashCommandBuilder()
     ));
 
 export async function execute(interaction: ChatInputCommandInteraction): Promise<void> {
+  logger.debug(`Play command received from ${interaction.user.tag}`);
   await interaction.deferReply();
+  logger.debug('Play command deferred');
 
   const member = interaction.member as any;
   const guildId = interaction.guildId!;
-  const query = interaction.options.get('name')?.value as string;
-  const next = interaction.options.get('next')?.value as boolean || false;
-  const type = interaction.options.get('type')?.value as number | undefined;
+  const query = interaction.options.getString('name', true);
+  const next = interaction.options.getBoolean('next') || false;
+  const type = interaction.options.getInteger('type') ?? undefined;
+
+  logger.debug(`Play params: query="${query}", next=${next}, type=${type}`);
 
   if (!member?.voice?.channel) {
+    logger.debug('User not in voice channel');
     await interaction.editReply({ embeds: [new EmbedBuilder().setColor(0xED4245).setDescription('❌ You must be in a voice channel')] });
     return;
   }
 
   const queue = getQueue(guildId);
   if (!queue.connection) {
+    logger.debug('No voice connection, attempting to join');
     const connection = await connectToChannel(member);
     if (!connection) {
       await interaction.editReply({ embeds: [new EmbedBuilder().setColor(0xED4245).setDescription('❌ Could not join your voice channel')] });
@@ -41,7 +47,9 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
     queue.connection = { audioPlayer: null as any, connection, resource: null, startTime: 0 };
   }
 
+  logger.debug(`Searching for: "${query}"`);
   const result = await searchAndResolve(query, type);
+  logger.debug(`Search returned ${result.tracks.length} tracks (type: ${result.type})`);
 
   if (result.tracks.length === 0) {
     await interaction.editReply({ embeds: [new EmbedBuilder().setColor(0xED4245).setDescription(`❌ No results found for "${query}"`)] });
@@ -55,9 +63,11 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
     return;
   }
 
+  logger.debug(`Playing ${result.tracks.length} tracks`);
   await playTracks(guildId, result.tracks, interaction.user.id, interaction.channel as any);
   const count = result.tracks.length;
   await interaction.editReply({ embeds: [new EmbedBuilder().setColor(0x57F287).setDescription(`✅ Enqueued **${count}** track${count > 1 ? 's' : ''} (${result.type})`)] });
+  logger.debug('Play command completed');
 }
 
 export async function autocomplete(interaction: AutocompleteInteraction): Promise<void> {
