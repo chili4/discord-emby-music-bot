@@ -32,6 +32,8 @@ discordClient.once(Events.ClientReady, async () => {
 });
 
 discordClient.on(Events.InteractionCreate, async (interaction) => {
+  logger.debug(`🔄 Interaction: type=${interaction.type} cmd=${(interaction as any).commandName || 'N/A'} user=${interaction.user.tag}`);
+
   if (interaction.isCommand()) {
     const cmd = commands.get(interaction.commandName);
     if (!cmd) return logger.warn(`Unknown command: ${interaction.commandName}`);
