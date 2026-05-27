@@ -60,7 +60,9 @@ export function getPlaybackButtons(isPaused: boolean, loopMode: string, isFav: b
   );
 
   const row2 = new ActionRowBuilder<ButtonBuilder>().addComponents(
+    new ButtonBuilder().setCustomId('rewind').setEmoji('⏪').setStyle(ButtonStyle.Secondary),
     new ButtonBuilder().setCustomId('loop').setEmoji(loopEmoji).setStyle(loopStyle),
+    new ButtonBuilder().setCustomId('forward').setEmoji('⏩').setStyle(ButtonStyle.Secondary),
     new ButtonBuilder().setCustomId('fav').setEmoji(isFav ? '❤️' : '🤍').setStyle(ButtonStyle.Secondary),
   );
 

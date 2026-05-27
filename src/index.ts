@@ -86,14 +86,50 @@ async function handleButton(interaction: ButtonInteraction) {
       await playCurrent(g, interaction.channel as any);
       break;
     }
+    case 'rewind': {
+      if (q.connection?.startTime) {
+        q.seekOffset += Math.floor((Date.now() - q.connection.startTime) / 1000);
+      }
+      q.seekOffset = Math.max(0, q.seekOffset - 10);
+      if (q.isPaused) {
+        q.connection!.startTime = Date.now();
+      } else {
+        q.connection?.audioPlayer?.stop();
+        q.connection!.startTime = Date.now();
+        await playCurrent(g, interaction.channel as any);
+      }
+      break;
+    }
+    case 'forward': {
+      const cur = getCurrentTrack(g);
+      if (q.connection?.startTime) {
+        q.seekOffset += Math.floor((Date.now() - q.connection.startTime) / 1000);
+      }
+      q.seekOffset = Math.min((cur?.track.duration || 0) - 1, q.seekOffset + 10);
+      if (q.isPaused) {
+        q.connection!.startTime = Date.now();
+      } else {
+        q.connection?.audioPlayer?.stop();
+        q.connection!.startTime = Date.now();
+        await playCurrent(g, interaction.channel as any);
+      }
+      break;
+    }
     case 'stop': {
-      q.connection?.audioPlayer?.stop(true);
       q.items = [];
       q.currentIndex = -1;
       q.isPlaying = false;
       q.isPaused = false;
       stopScrobble(g);
       stopNpTimer(g);
+      if (q.connection?.audioPlayer) q.connection.audioPlayer.stop(true);
+      if (q.npMessageId && q.npChannelId) {
+        const ch = interaction.client.channels.cache.get(q.npChannelId) as any;
+        if (ch) {
+          const msg = await ch.messages.fetch(q.npMessageId).catch(() => null);
+          if (msg) await msg.edit({ components: [] }).catch(() => {});
+        }
+      }
       await interaction.editReply({ embeds: [], components: [] }).catch(() => {});
       return;
     }
