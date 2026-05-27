@@ -5,7 +5,12 @@ import { config } from './config';
 import { logger } from './utils/logger';
 import { getCommandData, registerCommands } from './commands';
 
+process.on('unhandledRejection', (err) => {
+  logger.error('Unhandled rejection:', err);
+});
+
 const commands = registerCommands();
+logger.debug(`Commands in collection: ${commands.map((_, k) => k).join(', ')}`);
 
 async function registerSlashCommands() {
   try {
@@ -24,14 +29,23 @@ discordClient.once(Events.ClientReady, async () => {
 });
 
 discordClient.on(Events.InteractionCreate, async (interaction) => {
+  logger.debug(`Interaction received: type=${interaction.type}, name=${(interaction as any).commandName || 'N/A'}, user=${interaction.user.tag}`);
+
   if (interaction.isCommand()) {
-    const command = commands.get(interaction.commandName);
-    if (!command) return;
+    const cmdName = interaction.commandName;
+    logger.debug(`Command interaction: "${cmdName}"`);
+
+    if (!commands.has(cmdName)) {
+      logger.warn(`Command "${cmdName}" not found in collection. Available: ${commands.map((_, k) => k).join(', ')}`);
+      return;
+    }
+
+    const command = commands.get(cmdName)!;
 
     try {
       await command.execute(interaction);
     } catch (err: any) {
-      logger.error(`Error executing ${interaction.commandName}:`, err.message);
+      logger.error(`Error executing ${cmdName}:`, err?.stack || err?.message || err);
       const reply = interaction.deferred || interaction.replied
         ? interaction.editReply.bind(interaction)
         : interaction.reply.bind(interaction);
@@ -51,6 +65,8 @@ discordClient.on(Events.InteractionCreate, async (interaction) => {
         await interaction.respond([]).catch(() => {});
       }
     }
+  } else {
+    logger.debug(`Unhandled interaction type: ${interaction.type}`);
   }
 });
 
