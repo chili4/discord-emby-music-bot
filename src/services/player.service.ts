@@ -105,27 +105,34 @@ export async function connectToChannel(member: GuildMember): Promise<VoiceConnec
 export async function playCurrent(guildId: string, textChannel?: TextChannel): Promise<void> {
   const queue = getQueue(guildId);
   const current = getCurrentTrack(guildId);
-  if (!current || !queue.connection) return;
+  if (!current || !queue.connection) {
+    logger.warn(`playCurrent: no current track or connection for guild ${guildId}`);
+    return;
+  }
 
   const streamUrl = embyClient.getStreamUrl(current.track.id);
-  logger.debug(`Playing: ${current.track.name} (${streamUrl})`);
+  logger.debug(`Playing: ${current.track.name} (id=${current.track.id})`);
+
+  const volumeFilter = `volume=${Math.round(Math.pow(queue.volume / 100, 0.6) * 100)}/100`;
 
   const ffmpegArgs = [
-    '-reconnect', '1',
-    '-reconnect_streamed', '1',
-    '-reconnect_delay_max', '5',
+    '-headers', `X-Emby-Token: ${embyClient.getAccessToken()}`,
     '-i', streamUrl,
     '-analyzeduration', '0',
     '-loglevel', '0',
+    '-af', volumeFilter,
     '-acodec', 'libopus',
     '-f', 'opus',
     '-ar', '48000',
     '-ac', '2',
     '-b:a', '128k',
-    '-volume', String(Math.round(Math.pow(queue.volume / 100, 0.6) * 256)),
+    '-application', 'audio',
+    'pipe:1',
   ];
 
-  const ffmpeg = spawn('ffmpeg', ffmpegArgs, { stdio: ['ignore', 'pipe', 'pipe'] });
+  logger.debug(`FFmpeg: ffmpeg ${ffmpegArgs.join(' ')}`);
+
+  const ffmpeg = spawn('ffmpeg', ffmpegArgs, { stdio: ['pipe', 'pipe', 'pipe'] });
 
   const resource = createAudioResource(ffmpeg.stdout, {
     inlineVolume: false,
@@ -155,11 +162,21 @@ export async function playCurrent(guildId: string, textChannel?: TextChannel): P
 
   ffmpeg.on('error', (err) => {
     logger.error(`FFmpeg error: ${err.message}`);
+    if (textChannel) {
+      textChannel.send({ embeds: [new (require('discord.js').EmbedBuilder)().setColor(0xED4245).setDescription('❌ Error playing audio')] }).catch(() => {});
+    }
   });
 
-  ffmpeg.stderr.on('data', (data) => {
-    logger.debug(`FFmpeg: ${data}`);
+  ffmpeg.on('exit', (code) => {
+    if (code !== 0) logger.warn(`FFmpeg exited with code ${code}`);
   });
+
+  ffmpeg.stderr.on('data', (data: Buffer) => {
+    const msg = data.toString().trim();
+    if (msg) logger.debug(`FFmpeg: ${msg.slice(0, 200)}`);
+  });
+
+  ffmpeg.stdin.on('error', () => {});
 }
 
 export async function playTracks(

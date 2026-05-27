@@ -41,18 +41,16 @@ export async function searchAndResolve(query: string, type?: number): Promise<Se
 }
 
 export async function searchAutocomplete(query: string, type?: number): Promise<{ name: string; value: string }[]> {
+  if (!query || query.length < 2) return [];
+
   const targetType = resolveType(type);
-  logger.debug(`autocomplete: query="${query}", type=${type}, targetType=${targetType}`);
   const hints = await embyClient.search(query, 10);
-  logger.debug(`autocomplete: got ${hints.length} hints from search`);
   const filtered = targetType ? hints.filter(h => h.Type === targetType) : hints;
-  logger.debug(`autocomplete: after filter: ${filtered.length} results`);
-  const result = filtered.slice(0, 10).map(h => ({
-    name: `${h.Name}${h.Album ? ` - ${h.Album}` : ''} [${h.Type}]`,
-    value: h.ItemId || h.Id,
+
+  return filtered.slice(0, 10).map(h => ({
+    name: h.Name.length > 90 ? h.Name.slice(0, 87) + '...' : h.Name,
+    value: h.Name.length > 90 ? h.Name.slice(0, 90) : h.Name,
   }));
-  logger.debug(`autocomplete: returning ${result.length} items`);
-  return result;
 }
 
 function resolveType(type?: number): string | null {

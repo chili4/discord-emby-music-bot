@@ -190,7 +190,11 @@ export class EmbyClient {
   }
 
   getStreamUrl(itemId: string): string {
-    return `${config.EMBY_URL}/Audio/${itemId}/stream?Static=true&api_key=${this.accessToken}`;
+    return `${config.EMBY_URL}/Audio/${itemId}/stream?api_key=${this.accessToken}&Container=mp3`;
+  }
+
+  getTranscodeUrl(itemId: string): string {
+    return `${config.EMBY_URL}/Audio/${itemId}/stream?api_key=${this.accessToken}&TranscodeReasons=ContainerBitrateExceedsLimit&AudioCodec=mp3&MaxAudioChannels=2&StartTimeTicks=0&SubtitleMethod=Encode`;
   }
 
   hintToTrack(hint: EmbySearchHint): Track {
