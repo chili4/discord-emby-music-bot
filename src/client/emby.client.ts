@@ -297,10 +297,12 @@ export class EmbyClient {
   }
 
   async isFavorite(itemId: string): Promise<boolean> {
-    // HEAD /FavoriteItems/{id} returns 200 if favorited, 404 if not
     try {
-      await this.api.head(`/Users/${this.userId}/FavoriteItems/${itemId}`);
-      return true;
+      const res = await this.api.get(`/Users/${this.userId}/Items`, {
+        params: { Ids: itemId, Filters: 'IsFavorite', Limit: 1 },
+      });
+      const items: any[] = res.data?.Items || [];
+      return items.length > 0;
     } catch {
       return false;
     }
