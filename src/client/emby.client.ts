@@ -183,6 +183,7 @@ export class EmbyClient {
       duration: ticksToSeconds(item.RunTimeTicks || 0),
       imageTag: item.ImageTags?.Primary || null,
       type: this.mapType(item.Type),
+      playlistItemId: item.PlaylistItemId,
     };
   }
 
@@ -244,6 +245,83 @@ export class EmbyClient {
     } catch {
       return null;
     }
+  }
+
+  async addFavorite(itemId: string): Promise<void> {
+    try {
+      await this.api.post(`/Users/${this.userId}/FavoriteItems/${itemId}`);
+    } catch { }
+  }
+
+  async removeFavorite(itemId: string): Promise<void> {
+    try {
+      await this.api.delete(`/Users/${this.userId}/FavoriteItems/${itemId}`);
+    } catch { }
+  }
+
+  async getFavorites(): Promise<EmbyItem[]> {
+    try {
+      const res = await this.api.get(`/Users/${this.userId}/Items`, {
+        params: {
+          Filters: 'IsFavorite',
+          IncludeItemTypes: 'Audio',
+          Recursive: true,
+          Limit: 200,
+          SortBy: 'SortName',
+        },
+      });
+      return res.data.Items || [];
+    } catch {
+      return [];
+    }
+  }
+
+  async getPlaylists(): Promise<EmbyItem[]> {
+    try {
+      const res = await this.api.get(`/Users/${this.userId}/Items`, {
+        params: {
+          IncludeItemTypes: 'Playlist',
+          Recursive: true,
+          SortBy: 'SortName',
+        },
+      });
+      return res.data.Items || [];
+    } catch {
+      return [];
+    }
+  }
+
+  async createPlaylist(name: string): Promise<string | null> {
+    try {
+      const res = await this.api.post('/Playlists', null, {
+        params: { Name: name, UserId: this.userId, MediaType: 'Audio' },
+      });
+      return res.data.Id || null;
+    } catch {
+      return null;
+    }
+  }
+
+  async addToPlaylist(playlistId: string, itemIds: string[]): Promise<void> {
+    try {
+      await this.api.post(`/Playlists/${playlistId}/Items`, null, {
+        params: { Ids: itemIds.join(','), UserId: this.userId },
+      });
+    } catch { }
+  }
+
+  async removeFromPlaylist(playlistId: string, entryIds: string[]): Promise<void> {
+    try {
+      await this.api.delete(`/Playlists/${playlistId}/Items`, {
+        params: { EntryIds: entryIds.join(','), UserId: this.userId },
+      });
+    } catch { }
+  }
+
+  async deletePlaylist(playlistId: string): Promise<void> {
+    try {
+      await this.api.delete(`/Items/${playlistId}`);
+    } catch { }
   }
 }
 

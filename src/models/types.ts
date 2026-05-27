@@ -40,6 +40,8 @@ export interface EmbyItem {
   ImageTags?: { Primary?: string };
   ProductionYear?: number;
   MediaSources?: EmbyMediaSource[];
+  PlaylistItemId?: string;
+  IsFavorite?: boolean;
 }
 
 export interface EmbyMediaSource {
@@ -57,6 +59,7 @@ export interface Track {
   duration: number;
   imageTag: string | null;
   type: 'audio' | 'album' | 'playlist' | 'artist';
+  playlistItemId?: string;
 }
 
 export interface QueueItem {

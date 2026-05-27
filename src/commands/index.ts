@@ -19,10 +19,12 @@ import * as random from './random.command';
 import * as lyrics from './lyrics.command';
 import * as help from './help.command';
 import * as clear from './clear.command';
+import * as fav from './fav.command';
+import * as playlist from './playlist.command';
 
 const commands = [
   play, pause, skip, previous, stop, clear,
-  queue, remove, jump, shuffle,
+  queue, remove, jump, shuffle, fav, playlist,
   volume, summon, disconnect,
   status, nowplaying, search, random, lyrics, help,
 ] as const;
