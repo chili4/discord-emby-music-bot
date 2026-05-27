@@ -140,6 +140,7 @@ async function handleButton(interaction: ButtonInteraction) {
       if (cur) {
         const newFav = await embyClient.toggleFavorite(cur.track.id);
         cur.track.isFavorite = newFav;
+        logger.debug(`Fav toggle: ${cur.track.name} → ${newFav ? '❤️' : '🤍'}`);
         await updateNP(g, newFav);
         await interaction.editReply({}).catch(() => {});
         return;
