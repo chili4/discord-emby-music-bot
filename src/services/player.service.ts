@@ -55,7 +55,12 @@ function getAudioPlayer(guildId: string): AudioPlayer {
 
 export async function connectToChannel(member: GuildMember): Promise<VoiceConnection | null> {
   const voiceChannel = member.voice.channel;
-  if (!voiceChannel) return null;
+  if (!voiceChannel) {
+    logger.warn('connectToChannel: member not in a voice channel');
+    return null;
+  }
+
+  logger.debug(`connectToChannel: attempting to join channel "${voiceChannel.name}" (${voiceChannel.id})`);
 
   const connection = joinVoiceChannel({
     channelId: voiceChannel.id,
@@ -64,13 +69,36 @@ export async function connectToChannel(member: GuildMember): Promise<VoiceConnec
     selfDeaf: false,
   });
 
+  connection.on('debug', (msg) => logger.debug(`[Voice] ${msg}`));
+  connection.on(VoiceConnectionStatus.Connecting, () => logger.debug('[Voice] Connecting...'));
+  connection.on(VoiceConnectionStatus.Signalling, () => logger.debug('[Voice] Signalling...'));
+  connection.on(VoiceConnectionStatus.Ready, () => logger.debug('[Voice] Ready!'));
+  connection.on('error', (err) => logger.error(`[Voice] Error: ${err.message}`));
+
+  connection.on(VoiceConnectionStatus.Disconnected, async (oldState, newState) => {
+    logger.debug(`[Voice] Disconnected: ${oldState.status} -> ${newState.status}`);
+    try {
+      await Promise.race([
+        entersState(connection, VoiceConnectionStatus.Signalling, 5_000),
+        entersState(connection, VoiceConnectionStatus.Connecting, 5_000),
+      ]);
+    } catch {
+      if (connection.state.status === VoiceConnectionStatus.Disconnected) {
+        logger.debug('[Voice] Destroying stale connection');
+        connection.destroy();
+      }
+    }
+  });
+
   try {
-    await entersState(connection, VoiceConnectionStatus.Ready, 20_000);
-  } catch {
+    await entersState(connection, VoiceConnectionStatus.Ready, 30_000);
+  } catch (err) {
+    logger.error(`[Voice] Failed to ready within 30s (state: ${connection.state.status})`);
     connection.destroy();
     return null;
   }
 
+  logger.info(`Connected to voice channel "${voiceChannel.name}"`);
   return connection;
 }
 
