@@ -17,8 +17,57 @@ import { getQueue, getCurrentTrack, skipTrack } from './queue.service';
 import { startScrobble, stopScrobble } from './scrobble.service';
 import { config } from '../config';
 import { nowPlayingEmbed, getPlaybackButtons } from '../utils/embed';
+import { EmbedBuilder } from 'discord.js';
 
 const players = new Map<string, AudioPlayer>();
+
+async function sendOrUpdateNowPlaying(guildId: string, textChannel?: import('discord.js').TextChannel) {
+  const queue = getQueue(guildId);
+  const current = getCurrentTrack(guildId);
+  if (!current) return;
+
+  const position = queue.connection?.startTime
+    ? queue.seekOffset + Math.floor((Date.now() - queue.connection.startTime) / 1000)
+    : 0;
+
+  const embed = nowPlayingEmbed(current.track, Math.min(position, current.track.duration), queue.volume, current.requestedBy);
+  const buttons = getPlaybackButtons(queue.isPaused, queue.loopMode, false);
+
+  if (queue.npMessageId && queue.npChannelId) {
+    const channel = textChannel?.client.channels.cache.get(queue.npChannelId) as import('discord.js').TextChannel | undefined;
+    if (channel) {
+      const msg = await channel.messages.fetch(queue.npMessageId).catch(() => null);
+      if (msg) {
+        await msg.edit({ embeds: [embed], components: [buttons] }).catch(() => {});
+        return;
+      }
+    }
+  }
+
+  if (textChannel) {
+    const msg = await textChannel.send({ embeds: [embed], components: [buttons] }).catch(() => null);
+    if (msg) {
+      queue.npMessageId = msg.id;
+      queue.npChannelId = msg.channelId;
+    }
+  }
+}
+
+export function stopNpTimer(guildId: string) {
+  const queue = getQueue(guildId);
+  if (queue.npTimer) {
+    clearInterval(queue.npTimer);
+    queue.npTimer = null;
+  }
+}
+
+function startNpTimer(guildId: string) {
+  const queue = getQueue(guildId);
+  stopNpTimer(guildId);
+  queue.npTimer = setInterval(() => {
+    sendOrUpdateNowPlaying(guildId).catch(() => {});
+  }, 10_000);
+}
 
 function getAudioPlayer(guildId: string): AudioPlayer {
   if (!players.has(guildId)) {
@@ -117,6 +166,13 @@ export async function playCurrent(guildId: string, textChannel?: TextChannel): P
 
   const ffmpegArgs = [
     '-headers', `X-Emby-Token: ${embyClient.getAccessToken()}`,
+  ];
+
+  if (queue.seekOffset > 0) {
+    ffmpegArgs.push('-ss', String(queue.seekOffset));
+  }
+
+  ffmpegArgs.push(
     '-i', streamUrl,
     '-analyzeduration', '0',
     '-loglevel', '0',
@@ -128,7 +184,9 @@ export async function playCurrent(guildId: string, textChannel?: TextChannel): P
     '-b:a', '128k',
     '-application', 'audio',
     'pipe:1',
-  ];
+  );
+
+  logger.debug(`seekOffset: ${queue.seekOffset}s`);
 
   logger.debug(`FFmpeg: ffmpeg ${ffmpegArgs.join(' ')}`);
 
@@ -156,9 +214,9 @@ export async function playCurrent(guildId: string, textChannel?: TextChannel): P
   startScrobble(guildId);
 
   if (textChannel) {
-    const embed = nowPlayingEmbed(current.track, 0, queue.volume, current.requestedBy);
-    const buttons = getPlaybackButtons(false, queue.loopMode, false);
-    textChannel.send({ embeds: [embed], components: [buttons] }).catch(() => {});
+    queue.seekOffset = 0;
+    await sendOrUpdateNowPlaying(guildId, textChannel);
+    startNpTimer(guildId);
   }
 
   ffmpeg.on('error', (err) => {
@@ -217,10 +275,15 @@ export function setVolume(guildId: string, volume: number): void {
   queue.volume = Math.max(0, Math.min(150, volume));
 }
 
+export async function updateNowPlayingEmbed(guildId: string) {
+  await sendOrUpdateNowPlaying(guildId);
+}
+
 export function disconnect(guildId: string): void {
   const queue = getQueue(guildId);
   if (queue.connection?.connection) {
     stopScrobble(guildId);
+    stopNpTimer(guildId);
     queue.connection.connection.destroy();
   }
   const player = players.get(guildId);
@@ -228,6 +291,8 @@ export function disconnect(guildId: string): void {
     player.stop(true);
     players.delete(guildId);
   }
+  queue.npMessageId = null;
+  queue.npChannelId = null;
   const { removeQueue } = require('./queue.service');
   removeQueue(guildId);
 }

@@ -76,6 +76,10 @@ export interface QueueState {
   volume: number;
   loopMode: 'none' | 'all' | 'one';
   scrobbleInterval: NodeJS.Timeout | null;
+  npChannelId: string | null;
+  npMessageId: string | null;
+  npTimer: NodeJS.Timeout | null;
+  seekOffset: number;
 }
 
 export interface AudioPlayerConnection {

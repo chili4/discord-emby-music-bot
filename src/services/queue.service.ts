@@ -13,6 +13,10 @@ export function getQueue(guildId: string): QueueState {
       volume: 50,
       loopMode: 'none',
       scrobbleInterval: null,
+      npChannelId: null,
+      npMessageId: null,
+      npTimer: null,
+      seekOffset: 0,
     });
   }
   return queues.get(guildId)!;

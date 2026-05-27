@@ -21,11 +21,12 @@ import * as help from './help.command';
 import * as clear from './clear.command';
 import * as fav from './fav.command';
 import * as playlist from './playlist.command';
+import * as seek from './seek.command';
 
 const commands = [
   play, pause, skip, previous, stop, clear,
   queue, remove, jump, shuffle, fav, playlist,
-  volume, summon, disconnect,
+  volume, summon, disconnect, seek,
   status, nowplaying, search, random, lyrics, help,
 ] as const;
 

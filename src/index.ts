@@ -1,14 +1,11 @@
-import {
-  Events, REST, Routes, ButtonInteraction,
-  EmbedBuilder, ActionRowBuilder, ButtonBuilder,
-} from 'discord.js';
+import { Events, REST, Routes, ButtonInteraction } from 'discord.js';
 import { discordClient } from './client/discord.client';
 import { embyClient } from './client/emby.client';
 import { config } from './config';
 import { logger } from './utils/logger';
 import { getCommandData, registerCommands } from './commands';
 import { getQueue, getCurrentTrack, skipTrack, previousTrack } from './services/queue.service';
-import { playCurrent, setVolume } from './services/player.service';
+import { playCurrent, setVolume, updateNowPlayingEmbed, stopNpTimer } from './services/player.service';
 import { nowPlayingEmbed, getPlaybackButtons } from './utils/embed';
 import { stopScrobble } from './services/scrobble.service';
 
@@ -117,6 +114,7 @@ async function handleButton(interaction: ButtonInteraction): Promise<void> {
       if (queue.connection?.audioPlayer) {
         queue.connection.audioPlayer.unpause();
         queue.isPaused = false;
+        queue.connection.startTime = Date.now();
       }
       break;
     }
@@ -126,6 +124,7 @@ async function handleButton(interaction: ButtonInteraction): Promise<void> {
       }
       const next = skipTrack(guildId);
       if (next) {
+        queue.seekOffset = 0;
         await playCurrent(guildId, interaction.channel as any);
       }
       break;
@@ -133,6 +132,13 @@ async function handleButton(interaction: ButtonInteraction): Promise<void> {
     case 'prev': {
       if (queue.currentIndex > 0) {
         previousTrack(guildId);
+        if (queue.connection?.audioPlayer) {
+          queue.connection.audioPlayer.stop();
+        }
+        queue.seekOffset = 0;
+        await playCurrent(guildId, interaction.channel as any);
+      } else {
+        queue.seekOffset = 0;
         if (queue.connection?.audioPlayer) {
           queue.connection.audioPlayer.stop();
         }
@@ -149,7 +155,9 @@ async function handleButton(interaction: ButtonInteraction): Promise<void> {
       queue.isPlaying = false;
       queue.isPaused = false;
       stopScrobble(guildId);
-      break;
+      stopNpTimer(guildId);
+      await interaction.editReply({ embeds: [] as any, components: [] }).catch(() => {});
+      return;
     }
     case 'fav': {
       const current = getCurrentTrack(guildId);
@@ -166,15 +174,8 @@ async function handleButton(interaction: ButtonInteraction): Promise<void> {
     }
   }
 
-  // Update the buttons in the message
-  const current = getCurrentTrack(guildId);
-  if (current) {
-    const embed = nowPlayingEmbed(current.track, 0, queue.volume, current.requestedBy);
-    const buttons = getPlaybackButtons(queue.isPaused, queue.loopMode, false);
-    await interaction.editReply({ embeds: [embed], components: [buttons] }).catch(() => {});
-  } else {
-    await interaction.editReply({ components: [] }).catch(() => {});
-  }
+  await updateNowPlayingEmbed(guildId);
+  await interaction.editReply({}).catch(() => {});
 }
 
 async function start() {
