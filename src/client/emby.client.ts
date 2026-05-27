@@ -110,7 +110,9 @@ export class EmbyClient {
 
   async getItem(itemId: string): Promise<EmbyItem | null> {
     try {
-      const res = await this.api.get<EmbyItem>(`/Users/${this.userId}/Items/${itemId}`);
+      const res = await this.api.get<EmbyItem>(`/Users/${this.userId}/Items/${itemId}`, {
+        params: { Fields: 'IsFavorite' },
+      });
       return res.data;
     } catch {
       return null;
@@ -303,14 +305,14 @@ export class EmbyClient {
     }
   }
 
-  async toggleFavorite(itemId: string): Promise<boolean> {
-    const fav = await this.isFavorite(itemId);
-    if (fav) {
+  async toggleFavorite(itemId: string, currentFav: boolean): Promise<boolean> {
+    // Use local state instead of isFavorite() to avoid Emby eventual consistency issues
+    if (currentFav) {
       await this.removeFavorite(itemId);
     } else {
       await this.addFavorite(itemId);
     }
-    return !fav;
+    return !currentFav;
   }
 
   async addFavorite(itemId: string): Promise<void> {

@@ -60,17 +60,17 @@ export function getPlaybackButtons(
   const pauseEmoji = isPaused ? '▶️' : '⏸️';
 
   const row1 = new ActionRowBuilder<ButtonBuilder>().addComponents(
-    new ButtonBuilder().setCustomId('prev').setEmoji('⏮️').setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder().setCustomId(pauseId).setEmoji(pauseEmoji).setStyle(ButtonStyle.Primary),
-    new ButtonBuilder().setCustomId('stop').setEmoji('⏹️').setStyle(ButtonStyle.Danger),
-    new ButtonBuilder().setCustomId('next').setEmoji('⏭️').setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId('prev').setEmoji('⏮️').setLabel('Prev').setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId(pauseId).setEmoji(pauseEmoji).setLabel(isPaused ? 'Resume' : 'Pause').setStyle(ButtonStyle.Primary),
+    new ButtonBuilder().setCustomId('stop').setEmoji('⏹️').setLabel('Stop').setStyle(ButtonStyle.Danger),
+    new ButtonBuilder().setCustomId('next').setEmoji('⏭️').setLabel('Next').setStyle(ButtonStyle.Secondary),
   );
 
   const row2 = new ActionRowBuilder<ButtonBuilder>().addComponents(
-    new ButtonBuilder().setCustomId('rewind').setEmoji('⏪').setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder().setCustomId('loop').setEmoji(loopEmoji).setStyle(loopStyle),
-    new ButtonBuilder().setCustomId('forward').setEmoji('⏩').setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder().setCustomId('fav').setEmoji(isFav ? '❤️' : '🤍').setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId('rewind').setEmoji('⏪').setLabel('-10s').setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId('loop').setEmoji(loopEmoji).setLabel(loopMode === 'none' ? 'Off' : loopMode === 'all' ? 'All' : 'One').setStyle(loopStyle),
+    new ButtonBuilder().setCustomId('forward').setEmoji('⏩').setLabel('+10s').setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId('fav').setEmoji(isFav ? '❤️' : '🤍').setLabel('Fav').setStyle(ButtonStyle.Secondary),
   );
 
   return [row1, row2];

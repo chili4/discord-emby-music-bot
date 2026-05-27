@@ -190,8 +190,14 @@ export async function playTracks(
   }
 
   if (wasEmpty) {
-    q.currentIndex = 0;
+    q.currentIndex = q.items.length - tracks.length; // first of the newly added
     q.seekOffset = 0;
+    await playCurrent(guildId, channel);
+  } else if (!q.isPlaying && q.currentIndex === -1) {
+    // Edge case: queue has items but player is stopped (e.g., after crash cleanup)
+    q.currentIndex = q.items.length - tracks.length;
+    q.seekOffset = 0;
+    q.isPlaying = true;
     await playCurrent(guildId, channel);
   } else {
     const msg = await channel.send({

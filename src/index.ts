@@ -138,7 +138,7 @@ async function handleButton(interaction: ButtonInteraction) {
     case 'fav': {
       const cur = getCurrentTrack(g);
       if (cur) {
-        const newFav = await embyClient.toggleFavorite(cur.track.id);
+        const newFav = await embyClient.toggleFavorite(cur.track.id, cur.track.isFavorite || false);
         cur.track.isFavorite = newFav;
         logger.debug(`Fav toggle: ${cur.track.name} → ${newFav ? '❤️' : '🤍'}`);
         await updateNP(g, newFav);
