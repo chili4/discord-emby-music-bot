@@ -1,0 +1,17 @@
+services:
+  emby-discord-bot:
+    build: .
+    container_name: emby-discord-bot
+    restart: unless-stopped
+    environment:
+      - DISCORD_TOKEN=${DISCORD_TOKEN}
+      - EMBY_URL=${EMBY_URL}
+      - EMBY_USERNAME=${EMBY_USERNAME}
+      - EMBY_PASSWORD=${EMBY_PASSWORD}
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+    networks:
+      - emby_default
+
+networks:
+  emby_default:
+    external: true
