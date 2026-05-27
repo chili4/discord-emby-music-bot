@@ -19,8 +19,11 @@ logger.debug(`Commands: ${commands.map((_, k) => k).join(', ')}`);
 async function registerSlashCommands() {
   try {
     const rest = new REST({ version: '10' }).setToken(config.DISCORD_TOKEN);
-    await rest.put(Routes.applicationCommands(discordClient.user!.id), { body: getCommandData() });
-    logger.info(`Registered ${getCommandData().length} slash commands`);
+    const route = config.GUILD_ID
+      ? Routes.applicationGuildCommands(discordClient.user!.id, config.GUILD_ID)
+      : Routes.applicationCommands(discordClient.user!.id);
+    await rest.put(route, { body: getCommandData() });
+    logger.info(`Registered ${getCommandData().length} slash commands${config.GUILD_ID ? ' (guild)' : ' (global)'}`);
   } catch (e) {
     logger.error('Register failed:', e);
   }

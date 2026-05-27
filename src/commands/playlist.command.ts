@@ -3,6 +3,7 @@ import { embyClient } from '../client/emby.client';
 import { playTracks, connectToChannel } from '../services/player.service';
 import { getQueue } from '../services/queue.service';
 import { Track, EmbyItem } from '../models/types';
+import { logger } from '../utils/logger';
 
 const playlistNameOption = (opt: any) =>
   opt.setName('name').setDescription('Playlist name').setRequired(true).setAutocomplete(true);
@@ -194,18 +195,21 @@ export async function autocomplete(interaction: AutocompleteInteraction): Promis
   const focused = interaction.options.getFocused().toLowerCase();
   const results: { name: string; value: string }[] = [];
 
-  // Always suggest "favorites" if it matches
   if ('favorites'.includes(focused)) {
     results.push({ name: '⭐ Favorites', value: 'favorites' });
   }
 
-  const playlists = await embyClient.getPlaylists();
-  for (const p of playlists) {
-    if (p.Name.toLowerCase().includes(focused)) {
-      results.push({ name: p.Name, value: p.Name });
-      if (results.length >= 10) break;
+  try {
+    const playlists = await embyClient.getPlaylists();
+    for (const p of playlists) {
+      if (p.Name.toLowerCase().includes(focused)) {
+        results.push({ name: p.Name, value: p.Name });
+        if (results.length >= 10) break;
+      }
     }
+  } catch (e: any) {
+    logger.error(`Playlist autocomplete: ${e.message}`);
   }
 
-  await interaction.respond(results.slice(0, 10));
+  await interaction.respond(results.slice(0, 10)).catch(() => {});
 }

@@ -9,6 +9,7 @@ const configSchema = z.object({
   EMBY_USERNAME: z.string().min(1, 'EMBY_USERNAME is required'),
   EMBY_PASSWORD: z.string().min(1, 'EMBY_PASSWORD is required'),
   EMBY_PUBLIC_URL: z.string().url().optional(),
+  GUILD_ID: z.string().optional(),
   LOG_LEVEL: z.enum(['error', 'warn', 'info', 'debug']).default('info'),
 });
 

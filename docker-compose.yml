@@ -10,4 +10,5 @@ services:
       - EMBY_USERNAME=${EMBY_USERNAME}
       - EMBY_PASSWORD=${EMBY_PASSWORD}
       - EMBY_PUBLIC_URL=${EMBY_PUBLIC_URL}
+      - GUILD_ID=${GUILD_ID}
       - LOG_LEVEL=${LOG_LEVEL:-info}
