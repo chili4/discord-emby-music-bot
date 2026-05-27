@@ -7,11 +7,9 @@ import { getCommandData, registerCommands } from './commands';
 import {
   getQueue, getCurrentTrack, skipTrack, previousTrack,
 } from './services/queue.service';
-import {
-  playCurrent, updateNowPlayingEmbed, stopNpTimer,
-} from './services/player.service';
-import { stopScrobble } from './services/scrobble.service';
-import { nowPlayingEmbed, getPlaybackButtons, simpleEmbed } from './utils/embed';
+import { playCurrent, stopAndClear } from './services/player.service';
+import { updateNP } from './services/nowplaying.service';
+import { simpleEmbed } from './utils/embed';
 
 process.on('unhandledRejection', (e) => logger.error('Unhandled rejection:', e));
 
@@ -116,26 +114,13 @@ async function handleButton(interaction: ButtonInteraction) {
       break;
     }
     case 'stop': {
-      q.items = [];
-      q.currentIndex = -1;
-      q.isPlaying = false;
-      q.isPaused = false;
-      stopScrobble(g);
-      stopNpTimer(g);
-      if (q.connection?.audioPlayer) q.connection.audioPlayer.stop(true);
-      if (q.npMessageId && q.npChannelId) {
-        const ch = interaction.client.channels.cache.get(q.npChannelId) as any;
-        if (ch) {
-          const msg = await ch.messages.fetch(q.npMessageId).catch(() => null);
-          if (msg) await msg.edit({ components: [] }).catch(() => {});
-        }
-      }
+      await stopAndClear(g);
       await interaction.editReply({ embeds: [], components: [] }).catch(() => {});
       return;
     }
     case 'fav': {
       const cur = getCurrentTrack(g);
-      if (cur) await embyClient.addFavorite(cur.track.id);
+      if (cur) await embyClient.toggleFavorite(cur.track.id);
       break;
     }
     case 'loop': {
@@ -145,7 +130,7 @@ async function handleButton(interaction: ButtonInteraction) {
     }
   }
 
-  await updateNowPlayingEmbed(g);
+  await updateNP(g);
   await interaction.editReply({}).catch(() => {});
 }
 

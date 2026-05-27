@@ -10,77 +10,25 @@ import {
   NoSubscriberBehavior,
 } from '@discordjs/voice';
 import { spawn, ChildProcess } from 'child_process';
-import { GuildMember, TextChannel, Message } from 'discord.js';
+import { GuildMember, TextChannel } from 'discord.js';
 import { embyClient } from '../client/emby.client';
 import { logger } from '../utils/logger';
 import { getQueue, getCurrentTrack, skipTrack } from './queue.service';
 import { startScrobble, stopScrobble } from './scrobble.service';
-import { nowPlayingEmbed, getPlaybackButtons, simpleEmbed } from '../utils/embed';
+import {
+  sendNP, disableNP, clearNP,
+  startNpTimer, stopNpTimer,
+} from './nowplaying.service';
+import { simpleEmbed } from '../utils/embed';
 
 const players = new Map<string, AudioPlayer>();
 const ffmpegProcesses = new Map<string, ChildProcess>();
-
-async function sendOrUpdateNp(guildId: string, channel?: TextChannel) {
-  const q = getQueue(guildId);
-  const cur = getCurrentTrack(guildId);
-  if (!cur) return;
-
-  let pos = q.seekOffset;
-  if (q.connection?.startTime && !q.isPaused) {
-    pos += Math.floor((Date.now() - q.connection.startTime) / 1000);
-  }
-  pos = Math.min(pos, cur.track.duration);
-
-  const embed = nowPlayingEmbed(cur.track, pos, q.volume, cur.requestedBy);
-  const rows = getPlaybackButtons(q.isPaused, q.loopMode, false);
-
-  const npMsgId = q.npMessageId;
-  const npChId = q.npChannelId;
-
-  if (npMsgId && npChId) {
-    const client = (await import('../client/discord.client')).discordClient;
-    const ch = client.channels.cache.get(npChId) as TextChannel | undefined;
-    if (ch) {
-      const msg = await ch.messages.fetch(npMsgId).catch(() => null);
-      if (msg) {
-        await msg.edit({ embeds: [embed], components: rows }).catch(() => {});
-        return;
-      }
-    }
-  }
-
-  if (channel) {
-    const msg = await channel.send({ embeds: [embed], components: rows }).catch((e: any) => {
-      logger.error(`Failed to send NP embed: ${e.message}`);
-      return null;
-    });
-    if (msg) {
-      q.npMessageId = msg.id;
-      q.npChannelId = msg.channelId;
-    }
-  }
-}
-
-export function stopNpTimer(guildId: string) {
-  const q = getQueue(guildId);
-  if (q.npTimer) { clearInterval(q.npTimer); q.npTimer = null; }
-}
-
-function startNpTimer(guildId: string) {
-  stopNpTimer(guildId);
-  const q = getQueue(guildId);
-  q.npTimer = setInterval(() => sendOrUpdateNp(guildId), 10_000);
-}
-
-export async function updateNowPlayingEmbed(guildId: string) {
-  await sendOrUpdateNp(guildId);
-}
 
 export async function connectToChannel(member: GuildMember): Promise<VoiceConnection | null> {
   const ch = member.voice.channel;
   if (!ch) return null;
 
-  logger.debug(`Joining voice channel "${ch.name}"`);
+  logger.debug(`Joining "${ch.name}"`);
   const conn = joinVoiceChannel({
     channelId: ch.id,
     guildId: ch.guildId,
@@ -88,11 +36,11 @@ export async function connectToChannel(member: GuildMember): Promise<VoiceConnec
     selfDeaf: false,
   });
 
-  conn.on('debug', (m) => logger.debug(`[Voice] ${m}`));
-  conn.on(VoiceConnectionStatus.Connecting, () => logger.debug('[Voice] connecting'));
-  conn.on(VoiceConnectionStatus.Signalling, () => logger.debug('[Voice] signalling'));
-  conn.on(VoiceConnectionStatus.Ready, () => logger.debug('[Voice] ready'));
-  conn.on('error', (e) => logger.error(`[Voice] ${e.message}`));
+  conn.on('debug', (m) => logger.debug(`[V] ${m}`));
+  conn.on(VoiceConnectionStatus.Connecting, () => logger.debug('[V] connecting'));
+  conn.on(VoiceConnectionStatus.Signalling, () => logger.debug('[V] signalling'));
+  conn.on(VoiceConnectionStatus.Ready, () => logger.debug('[V] ready'));
+  conn.on('error', (e) => logger.error(`[V] ${e.message}`));
   conn.on(VoiceConnectionStatus.Disconnected, async () => {
     try {
       await Promise.race([
@@ -107,19 +55,25 @@ export async function connectToChannel(member: GuildMember): Promise<VoiceConnec
   try {
     await entersState(conn, VoiceConnectionStatus.Ready, 30_000);
   } catch {
-    logger.error('[Voice] timeout connecting');
+    logger.error('[V] timeout');
     conn.destroy();
     return null;
   }
 
-  logger.info('Connected to voice');
+  logger.info('Voice connected');
   return conn;
 }
 
-export async function playCurrent(guildId: string, textChannel?: TextChannel) {
+export async function playCurrent(guildId: string, channel?: TextChannel) {
   const q = getQueue(guildId);
   const cur = getCurrentTrack(guildId);
-  if (!cur || !q.connection) { logger.warn('playCurrent: no track or connection'); return; }
+  if (!cur || !q.connection) {
+    logger.warn('playCurrent: no track or connection');
+    return;
+  }
+
+  // CRITICAL: reset seekOffset on every new track playback
+  q.seekOffset = 0;
 
   const url = embyClient.getStreamUrl(cur.track.id);
   logger.debug(`Playing: ${cur.track.name} (id=${cur.track.id})`);
@@ -128,7 +82,6 @@ export async function playCurrent(guildId: string, textChannel?: TextChannel) {
   const args: string[] = [
     '-headers', `X-Emby-Token: ${embyClient.getAccessToken()}`,
   ];
-  if (q.seekOffset > 0) args.push('-ss', String(q.seekOffset));
   args.push(
     '-i', url,
     '-analyzeduration', '0',
@@ -142,6 +95,10 @@ export async function playCurrent(guildId: string, textChannel?: TextChannel) {
     'pipe:1',
   );
 
+  // Kill old FFmpeg if exists
+  const oldFf = ffmpegProcesses.get(guildId);
+  if (oldFf) { oldFf.kill(); ffmpegProcesses.delete(guildId); }
+
   const ff = spawn('ffmpeg', args, { stdio: ['pipe', 'pipe', 'pipe'] });
   ffmpegProcesses.set(guildId, ff);
 
@@ -152,25 +109,36 @@ export async function playCurrent(guildId: string, textChannel?: TextChannel) {
   q.connection.startTime = Date.now();
   q.isPlaying = true;
   q.isPaused = false;
-  q.connection.connection.subscribe(player);
+
+  if (q.connection.connection.state.status === VoiceConnectionStatus.Ready) {
+    q.connection.connection.subscribe(player);
+  }
   player.play(res);
 
   embyClient.reportPlaybackStart(cur.track.id, cur.track.id);
   startScrobble(guildId);
   startNpTimer(guildId);
 
-  if (textChannel) await sendOrUpdateNp(guildId, textChannel);
+  if (channel) {
+    await sendNP(channel, guildId);
+  } else {
+    // Auto-advance: update existing NP or send to stored channel
+    const storedChannel = await resolveStoredChannel(guildId);
+    if (storedChannel) await sendNP(storedChannel, guildId);
+  }
 
-  ff.on('error', (e) => logger.error(`FFmpeg: ${e.message}`));
+  ff.on('error', (e) => logger.error(`FF: ${e.message}`));
   ff.on('exit', (code) => {
-    if (code !== 0 && code !== null) logger.debug(`FFmpeg exited (${code})`);
+    if (code !== 0 && code !== null) logger.debug(`FF exited ${code}`);
     ffmpegProcesses.delete(guildId);
   });
-  ff.stderr.on('data', (d: Buffer) => {
-    const m = d.toString().trim();
-    if (m) logger.debug(`FFmpeg: ${m.slice(0, 150)}`);
-  });
-  ff.stdin.on('error', () => {});
+}
+
+async function resolveStoredChannel(guildId: string): Promise<TextChannel | null> {
+  const q = getQueue(guildId);
+  if (!q.npChannelId) return null;
+  const { discordClient } = await import('../client/discord.client');
+  return discordClient.channels.cache.get(q.npChannelId) as TextChannel || null;
 }
 
 export async function playTracks(
@@ -181,7 +149,6 @@ export async function playTracks(
 ) {
   const q = getQueue(guildId);
   const wasEmpty = q.items.length === 0;
-  const pos = q.items.length;
 
   for (const t of tracks) {
     q.items.push({ track: t, requestedBy });
@@ -191,7 +158,9 @@ export async function playTracks(
     q.currentIndex = 0;
     await playCurrent(guildId, channel);
   } else {
-    const msg = await channel.send({ embeds: [simpleEmbed(`Added **${tracks.length}** track${tracks.length > 1 ? 's' : ''} (#${pos + 1})`, 0x57F287)] }).catch(() => null);
+    const msg = await channel.send({
+      embeds: [simpleEmbed(`Added **${tracks.length}** track${tracks.length > 1 ? 's' : ''}`, 0x57F287)],
+    }).catch(() => null);
     if (msg) setTimeout(() => msg.delete().catch(() => {}), 15_000);
   }
 }
@@ -203,31 +172,28 @@ function getAudioPlayer(guildId: string): AudioPlayer {
 
     p.on(AudioPlayerStatus.Idle, async () => {
       const q = getQueue(guildId);
-      if (q.loopMode === 'one') { await playCurrent(guildId); return; }
+
+      if (q.loopMode === 'one') {
+        await disableNP(guildId);
+        await playCurrent(guildId);
+        return;
+      }
+
       const next = skipTrack(guildId);
       if (next) {
+        await disableNP(guildId);
         await playCurrent(guildId);
       } else {
         q.isPlaying = false;
         q.isPaused = false;
         stopScrobble(guildId);
         stopNpTimer(guildId);
-        // Update existing NP message to show stopped state
-        const cur = getCurrentTrack(guildId);
-        if (!cur && q.npMessageId && q.npChannelId) {
-          const client = (await import('../client/discord.client')).discordClient;
-          const ch = client.channels.cache.get(q.npChannelId) as TextChannel | undefined;
-          if (ch) {
-            const msg = await ch.messages.fetch(q.npMessageId).catch(() => null);
-            if (msg) await msg.edit({ components: [] }).catch(() => {});
-          }
-        }
+        await clearNP(guildId);
       }
     });
 
     p.on('error', (e) => {
-      logger.error(`AudioPlayer: ${e.message}`);
-      const q = getQueue(guildId);
+      logger.error(`AP: ${e.message}`);
       const next = skipTrack(guildId);
       if (next) playCurrent(guildId);
     });
@@ -239,19 +205,30 @@ export function setVolume(guildId: string, vol: number) {
   getQueue(guildId).volume = Math.max(0, Math.min(150, vol));
 }
 
-export function disconnect(guildId: string) {
+export async function stopAndClear(guildId: string) {
   const q = getQueue(guildId);
-  if (q.connection?.connection) {
-    stopScrobble(guildId);
-    stopNpTimer(guildId);
-    q.connection.connection.destroy();
+  // Clear queue FIRST, then stop player
+  q.items = [];
+  q.currentIndex = -1;
+  q.isPlaying = false;
+  q.isPaused = false;
+  q.seekOffset = 0;
+  stopScrobble(guildId);
+  stopNpTimer(guildId);
+  if (q.connection?.audioPlayer) {
+    q.connection.audioPlayer.stop(true);
   }
   const ff = ffmpegProcesses.get(guildId);
   if (ff) { ff.kill(); ffmpegProcesses.delete(guildId); }
+  await clearNP(guildId);
+}
+
+export async function disconnect(guildId: string) {
+  await stopAndClear(guildId);
+  const q = getQueue(guildId);
+  if (q.connection?.connection) q.connection.connection.destroy();
   const p = players.get(guildId);
   if (p) { p.stop(true); players.delete(guildId); }
   q.npMessageId = null;
   q.npChannelId = null;
-  const { removeQueue } = require('./queue.service');
-  removeQueue(guildId);
 }

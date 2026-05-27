@@ -25,6 +25,7 @@ export interface EmbySearchHint {
   ParentId?: string;
   ImageTags?: { Primary?: string };
   ProductionYear?: number;
+  IsFavorite?: boolean;
 }
 
 export interface EmbyItem {

@@ -87,6 +87,7 @@ export class EmbyClient {
           AlbumId: item.AlbumId,
           ImageTags: item.ImageTags,
           ProductionYear: item.ProductionYear,
+          IsFavorite: !!item.IsFavorite,
         }));
         logger.debug(`Items fallback returned ${hints.length} results`);
       }
@@ -283,6 +284,25 @@ export class EmbyClient {
     } catch {
       return null;
     }
+  }
+
+  async isFavorite(itemId: string): Promise<boolean> {
+    try {
+      const res = await this.api.get(`/Users/${this.userId}/Items/${itemId}`);
+      return !!res.data.IsFavorite;
+    } catch {
+      return false;
+    }
+  }
+
+  async toggleFavorite(itemId: string): Promise<boolean> {
+    const fav = await this.isFavorite(itemId);
+    if (fav) {
+      await this.removeFavorite(itemId);
+    } else {
+      await this.addFavorite(itemId);
+    }
+    return !fav;
   }
 
   async addFavorite(itemId: string): Promise<void> {

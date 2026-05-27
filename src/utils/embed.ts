@@ -1,8 +1,10 @@
-import { EmbedBuilder, ButtonBuilder, ButtonStyle, ActionRowBuilder, ColorResolvable } from 'discord.js';
+import { EmbedBuilder, ButtonBuilder, ButtonStyle, ActionRowBuilder } from 'discord.js';
 import { Track } from '../models/types';
 import { config } from '../config';
 
-function getImageUrl(track: Track): string | null {
+const COLOR = 0x2B2D31;
+
+function imgUrl(track: Track): string | null {
   if (track.imageTag && track.id) {
     return `${config.EMBY_URL}/Items/${track.id}/Images/Primary?tag=${track.imageTag}&quality=90&fillHeight=600&fillWidth=600`;
   }
@@ -22,31 +24,33 @@ function bar(current: number, total: number, len = 14): string {
 }
 
 export function nowPlayingEmbed(track: Track, position: number, volume: number, requestedBy?: string) {
-  const pos = Math.min(position, track.duration);
+  const pos = Math.min(Math.max(position, 0), track.duration);
   const progress = bar(pos, track.duration);
   const dur = track.duration > 0 ? `${fmt(pos)} / ${fmt(track.duration)}` : '0:00 / 0:00';
 
   const e = new EmbedBuilder()
-    .setColor(0x2B2D31 as ColorResolvable)
+    .setColor(COLOR)
     .setTitle(track.name)
+    .setDescription(`${track.artist || 'Unknown'} — ${track.album || 'Unknown'}`)
     .addFields(
-      { name: 'Artist', value: track.artist || 'Unknown', inline: true },
-      { name: 'Album', value: track.album || 'Unknown', inline: true },
-      { name: '\u200B', value: '\u200B', inline: true },
-      { name: `${progress}`, value: `\`${dur}\``, inline: false },
+      { name: progress, value: `\`${dur}\``, inline: false },
     );
 
   if (requestedBy) {
-    e.setFooter({ text: `Requested by @${requestedBy}`, iconURL: undefined });
+    e.setFooter({ text: `Pedido por @${requestedBy}` });
   }
 
-  const img = getImageUrl(track);
+  const img = imgUrl(track);
   if (img) e.setThumbnail(img);
 
   return e;
 }
 
-export function getPlaybackButtons(isPaused: boolean, loopMode: string, isFav: boolean) {
+export function getPlaybackButtons(
+  isPaused: boolean,
+  loopMode: string,
+  isFav: boolean,
+) {
   const loopEmoji = loopMode === 'all' ? '🔁' : loopMode === 'one' ? '🔂' : '➡️';
   const loopStyle = loopMode === 'none' ? ButtonStyle.Secondary : ButtonStyle.Primary;
   const pauseId = isPaused ? 'resume' : 'pause';
@@ -74,52 +78,26 @@ export function queueEmbed(tracks: Track[], currentIndex: number, page: number, 
   const items = tracks.slice(start, start + 10);
   const lines = items.map((t, i) => {
     const n = start + i;
-    const p = n === currentIndex ? '**▸**' : `**${n + 1}**`;
-    return `${p} ${t.name} — ${t.artist} \`${fmt(t.duration)}\``;
+    const p = n === currentIndex ? '▸' : `${n + 1}`;
+    return `**${p}** ${t.name} — ${t.artist} \`${fmt(t.duration)}\``;
   });
 
   return new EmbedBuilder()
-    .setColor(0x2B2D31 as ColorResolvable)
+    .setColor(COLOR)
     .setTitle('Queue')
-    .setDescription(lines.join('\n') || 'No tracks in queue')
+    .setDescription(lines.join('\n') || 'Empty')
     .setFooter({ text: `Page ${page + 1}/${totalPages} · ${tracks.length} tracks` });
 }
 
-export function statusEmbed(fields: { name: string; value: string }[]) {
-  return new EmbedBuilder()
-    .setColor(0x2B2D31 as ColorResolvable)
-    .setTitle('Bot Status')
-    .addFields(fields);
-}
-
-export function simpleEmbed(desc: string, color: number = 0x2B2D31) {
-  return new EmbedBuilder().setColor(color as ColorResolvable).setDescription(desc);
+export function simpleEmbed(desc: string, color: number = COLOR) {
+  return new EmbedBuilder().setColor(color).setDescription(desc);
 }
 
 export function helpEmbed() {
   return new EmbedBuilder()
-    .setColor(0x2B2D31 as ColorResolvable)
+    .setColor(COLOR)
     .setTitle('Emby Music Bot')
     .setDescription(
-      '`/play` · Search & play music\n' +
-      '`/pause` · Pause / resume\n' +
-      '`/skip` · Next track\n' +
-      '`/previous` · Go back\n' +
-      '`/stop` · Stop & clear queue\n' +
-      '`/queue` · Show queue\n' +
-      '`/remove` · Remove from queue\n' +
-      '`/shuffle` · Shuffle queue\n' +
-      '`/volume` · Set volume\n' +
-      '`/seek` · Seek in track\n' +
-      '`/summon` · Join your channel\n' +
-      '`/disconnect` · Leave channel\n' +
-      '`/search` · Search music\n' +
-      '`/random` · Random tracks\n' +
-      '`/nowplaying` · Current track\n' +
-      '`/status` · Bot status\n' +
-      '`/lyrics` · Song lyrics\n' +
-      '`/fav` · Manage favorites\n' +
-      '`/playlist` · Manage playlists\n' +
-      '`/help` · This message',
+      '`/play` · Search & play\n`/pause` · Pause / resume\n`/skip` · Next\n`/previous` · Back\n`/stop` · Stop & clear\n`/queue` · Show queue\n`/remove` · Remove from queue\n`/shuffle` · Shuffle\n`/volume` · Set volume\n`/seek` · Seek in track\n`/summon` · Join channel\n`/disconnect` · Leave\n`/search` · Search music\n`/random` · Random tracks\n`/nowplaying` · Current track\n`/status` · Bot status\n`/lyrics` · Lyrics\n`/fav` · Favorites\n`/playlist` · Playlists\n`/help` · This',
     );
 }
