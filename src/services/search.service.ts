@@ -1,5 +1,5 @@
 import { embyClient } from '../client/emby.client';
-import { Track } from '../models/types';
+import { EmbySearchHint, Track } from '../models/types';
 import { logger } from '../utils/logger';
 
 export interface SearchResult {
@@ -40,6 +40,16 @@ export async function searchAndResolve(query: string, type?: number): Promise<Se
   return { tracks: filtered.map(h => embyClient.hintToTrack(h)), type: 'list' };
 }
 
+function formatAutocompleteHint(hint: EmbySearchHint): { name: string; value: string } {
+  const artist = hint.AlbumArtist || hint.Artists?.[0] || '';
+  const album = hint.Album || '';
+  let label = hint.Name;
+  if (artist) label += ` — ${artist}`;
+  if (album) label += ` · ${album}`;
+  if (label.length > 95) label = label.slice(0, 92) + '...';
+  return { name: label, value: hint.Name.slice(0, 90) };
+}
+
 export async function searchAutocomplete(query: string, type?: number): Promise<{ name: string; value: string }[]> {
   if (!query || query.length < 2) return [];
 
@@ -47,10 +57,7 @@ export async function searchAutocomplete(query: string, type?: number): Promise<
   const hints = await embyClient.search(query, 10);
   const filtered = targetType ? hints.filter(h => h.Type === targetType) : hints;
 
-  return filtered.slice(0, 10).map(h => ({
-    name: h.Name.length > 90 ? h.Name.slice(0, 87) + '...' : h.Name,
-    value: h.Name.length > 90 ? h.Name.slice(0, 90) : h.Name,
-  }));
+  return filtered.slice(0, 10).map(formatAutocompleteHint);
 }
 
 function resolveType(type?: number): string | null {
