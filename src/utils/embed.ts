@@ -1,4 +1,4 @@
-import { EmbedBuilder, ColorResolvable } from 'discord.js';
+import { EmbedBuilder, ButtonBuilder, ButtonStyle, ActionRowBuilder, ColorResolvable } from 'discord.js';
 import { Track } from '../models/types';
 import { config } from '../config';
 
@@ -10,20 +10,40 @@ const COLORS = {
   info: 0x5865F2 as ColorResolvable,
 };
 
-export function nowPlayingEmbed(track: Track, position: number, volume: number, requestedBy?: string): EmbedBuilder {
-  const total = track.duration;
-  const bar = progressBarGen(position, total);
+function getImageUrl(track: Track): string | null {
+  if (track.imageTag && track.id) {
+    return `${config.EMBY_URL}/Items/${track.id}/Images/Primary?tag=${track.imageTag}&quality=90&fillHeight=300&fillWidth=300`;
+  }
+  return null;
+}
+
+function formatTime(seconds: number): string {
+  const mins = Math.floor(seconds / 60);
+  const secs = seconds % 60;
+  return `${mins}:${String(secs).padStart(2, '0')}`;
+}
+
+function progressBar(current: number, total: number, length = 12): string {
+  if (total <= 0) return '▱'.repeat(length);
+  const filled = Math.round((current / total) * length);
+  return '▰'.repeat(filled) + '▱'.repeat(length - filled);
+}
+
+export function nowPlayingEmbed(track: Track, position: number, volume: number, requestedBy?: string) {
   const embed = new EmbedBuilder()
     .setColor(COLORS.success)
-    .setTitle('Now Playing')
-    .setDescription(`**[${track.name}](${getImageUrl(track)})**`)
+    .setAuthor({ name: 'Now Playing', iconURL: 'https://cdn.discordapp.com/emojis/1015745804344639628.gif' })
+    .setTitle(track.name)
     .addFields(
       { name: 'Artist', value: track.artist || 'Unknown', inline: true },
       { name: 'Album', value: track.album || 'Unknown', inline: true },
-      { name: 'Duration', value: `${bar} \`${formatTime(position)} / ${formatTime(total)}\``, inline: false },
+      { name: 'Duration', value: `${progressBar(position, track.duration)} \`${formatTime(position)} / ${formatTime(track.duration)}\``, inline: false },
       { name: 'Volume', value: `${volume}%`, inline: true },
-      { name: 'Requested by', value: requestedBy ? `<@!${requestedBy}>` : 'Unknown', inline: true }
     );
+
+  if (requestedBy) {
+    embed.addFields({ name: 'Requested', value: `<@!${requestedBy}>`, inline: true });
+  }
 
   const imageUrl = getImageUrl(track);
   if (imageUrl) {
@@ -31,6 +51,20 @@ export function nowPlayingEmbed(track: Track, position: number, volume: number, 
   }
 
   return embed;
+}
+
+export function getPlaybackButtons(isPaused: boolean, loopMode: string, isFav: boolean) {
+  const loopLabel = loopMode === 'all' ? '🔁' : loopMode === 'one' ? '🔂' : '➡️';
+  const loopStyle = loopMode === 'none' ? ButtonStyle.Secondary : ButtonStyle.Primary;
+
+  return new ActionRowBuilder<ButtonBuilder>().addComponents(
+    new ButtonBuilder().setCustomId('prev').setEmoji('⏮️').setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId(isPaused ? 'resume' : 'pause').setEmoji(isPaused ? '▶️' : '⏸️').setStyle(ButtonStyle.Primary),
+    new ButtonBuilder().setCustomId('stop').setEmoji('⏹️').setStyle(ButtonStyle.Danger),
+    new ButtonBuilder().setCustomId('next').setEmoji('⏭️').setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId('fav').setEmoji(isFav ? '❤️' : '🤍').setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId('loop').setEmoji(loopLabel).setStyle(loopStyle),
+  );
 }
 
 export function queueEmbed(tracks: Track[], currentIndex: number, page: number, totalPages: number): EmbedBuilder {
@@ -65,7 +99,7 @@ export function helpEmbed(): EmbedBuilder {
   const categories = [
     { name: '🎵 Playback', value: '`/play` `/pause` `/stop` `/skip` `/previous` `/jump`' },
     { name: '📋 Queue', value: '`/queue` `/remove` `/shuffle` `/clear`' },
-    { name: '🔍 Search', value: '`/search` `/album` `/artist` `/random` `/playlist`' },
+    { name: '🔍 Search', value: '`/search` `/random` `/fav` `/playlist`' },
     { name: '🔊 Controls', value: '`/volume` `/summon` `/disconnect`' },
     { name: 'ℹ️ Info', value: '`/nowplaying` `/status` `/lyrics` `/help`' },
   ];
@@ -73,25 +107,6 @@ export function helpEmbed(): EmbedBuilder {
   return new EmbedBuilder()
     .setColor(COLORS.primary)
     .setTitle('Emby Music Bot - Commands')
-    .setDescription('Use `/` commands to control music playback from your Emby server')
+    .setDescription('Use `/` commands to control music playback from your Emby server.\nOr use the buttons below the Now Playing message!')
     .addFields(categories);
-}
-
-function progressBarGen(current: number, total: number, length = 16): string {
-  if (total <= 0) return '░'.repeat(length);
-  const filled = Math.round((current / total) * length);
-  return '█'.repeat(filled) + '░'.repeat(length - filled);
-}
-
-function formatTime(seconds: number): string {
-  const mins = Math.floor(seconds / 60);
-  const secs = seconds % 60;
-  return `${mins}:${String(secs).padStart(2, '0')}`;
-}
-
-function getImageUrl(track: Track): string | null {
-  if (track.imageTag && track.id) {
-    return `${config.EMBY_URL}/Items/${track.id}/Images/Primary?tag=${track.imageTag}&quality=90`;
-  }
-  return null;
 }

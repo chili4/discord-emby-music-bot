@@ -16,7 +16,7 @@ import { logger } from '../utils/logger';
 import { getQueue, getCurrentTrack, skipTrack } from './queue.service';
 import { startScrobble, stopScrobble } from './scrobble.service';
 import { config } from '../config';
-import { nowPlayingEmbed } from '../utils/embed';
+import { nowPlayingEmbed, getPlaybackButtons } from '../utils/embed';
 
 const players = new Map<string, AudioPlayer>();
 
@@ -157,7 +157,8 @@ export async function playCurrent(guildId: string, textChannel?: TextChannel): P
 
   if (textChannel) {
     const embed = nowPlayingEmbed(current.track, 0, queue.volume, current.requestedBy);
-    textChannel.send({ embeds: [embed] }).catch(() => {});
+    const buttons = getPlaybackButtons(false, queue.loopMode, false);
+    textChannel.send({ embeds: [embed], components: [buttons] }).catch(() => {});
   }
 
   ffmpeg.on('error', (err) => {

@@ -1,9 +1,16 @@
-import { Events, REST, Routes } from 'discord.js';
+import {
+  Events, REST, Routes, ButtonInteraction,
+  EmbedBuilder, ActionRowBuilder, ButtonBuilder,
+} from 'discord.js';
 import { discordClient } from './client/discord.client';
 import { embyClient } from './client/emby.client';
 import { config } from './config';
 import { logger } from './utils/logger';
 import { getCommandData, registerCommands } from './commands';
+import { getQueue, getCurrentTrack, skipTrack, previousTrack } from './services/queue.service';
+import { playCurrent, setVolume } from './services/player.service';
+import { nowPlayingEmbed, getPlaybackButtons } from './utils/embed';
+import { stopScrobble } from './services/scrobble.service';
 
 process.on('unhandledRejection', (err) => {
   logger.error('Unhandled rejection:', err);
@@ -11,6 +18,22 @@ process.on('unhandledRejection', (err) => {
 
 const commands = registerCommands();
 logger.debug(`Commands in collection: ${commands.map((_, k) => k).join(', ')}`);
+
+let nowPlayingMessageId: string | null = null; // Track the last NP message per guild
+const npMessages = new Map<string, string>();
+
+async function updateNowPlaying(guildId: string) {
+  const queue = getQueue(guildId);
+  const current = getCurrentTrack(guildId);
+  if (!current) return;
+
+  const position = queue.connection?.startTime
+    ? Math.floor((Date.now() - queue.connection.startTime) / 1000)
+    : 0;
+
+  const channelId = npMessages.get(guildId); // We'll set this when sending
+  // For button updates, the interaction channels are used directly
+}
 
 async function registerSlashCommands() {
   try {
@@ -44,6 +67,11 @@ discordClient.on(Events.InteractionCreate, async (interaction) => {
 
     try {
       await command.execute(interaction);
+
+      // Track the channel for now-playing updates
+      if (cmdName === 'play' && interaction.channel) {
+        npMessages.set(interaction.guildId!, interaction.channel.id);
+      }
     } catch (err: any) {
       logger.error(`Error executing ${cmdName}:`, err?.stack || err?.message || err);
       const reply = interaction.deferred || interaction.replied
@@ -65,10 +93,89 @@ discordClient.on(Events.InteractionCreate, async (interaction) => {
         await interaction.respond([]).catch(() => {});
       }
     }
+  } else if (interaction.isButton()) {
+    await handleButton(interaction);
   } else {
     logger.debug(`Unhandled interaction type: ${interaction.type}`);
   }
 });
+
+async function handleButton(interaction: ButtonInteraction): Promise<void> {
+  await interaction.deferUpdate();
+  const guildId = interaction.guildId!;
+  const queue = getQueue(guildId);
+
+  switch (interaction.customId) {
+    case 'pause': {
+      if (queue.connection?.audioPlayer) {
+        queue.connection.audioPlayer.pause();
+        queue.isPaused = true;
+      }
+      break;
+    }
+    case 'resume': {
+      if (queue.connection?.audioPlayer) {
+        queue.connection.audioPlayer.unpause();
+        queue.isPaused = false;
+      }
+      break;
+    }
+    case 'next': {
+      if (queue.connection?.audioPlayer) {
+        queue.connection.audioPlayer.stop();
+      }
+      const next = skipTrack(guildId);
+      if (next) {
+        await playCurrent(guildId, interaction.channel as any);
+      }
+      break;
+    }
+    case 'prev': {
+      if (queue.currentIndex > 0) {
+        previousTrack(guildId);
+        if (queue.connection?.audioPlayer) {
+          queue.connection.audioPlayer.stop();
+        }
+        await playCurrent(guildId, interaction.channel as any);
+      }
+      break;
+    }
+    case 'stop': {
+      if (queue.connection?.audioPlayer) {
+        queue.connection.audioPlayer.stop(true);
+      }
+      queue.items = [];
+      queue.currentIndex = -1;
+      queue.isPlaying = false;
+      queue.isPaused = false;
+      stopScrobble(guildId);
+      break;
+    }
+    case 'fav': {
+      const current = getCurrentTrack(guildId);
+      if (current) {
+        await embyClient.addFavorite(current.track.id);
+      }
+      break;
+    }
+    case 'loop': {
+      const modes: ('none' | 'all' | 'one')[] = ['none', 'all', 'one'];
+      const idx = modes.indexOf(queue.loopMode);
+      queue.loopMode = modes[(idx + 1) % modes.length];
+      break;
+    }
+  }
+
+  // Update the buttons in the message
+  const current = getCurrentTrack(guildId);
+  if (current) {
+    const embed = nowPlayingEmbed(current.track, 0, queue.volume, current.requestedBy);
+    const buttons = getPlaybackButtons(queue.isPaused, queue.loopMode, false);
+    await interaction.editReply({ embeds: [embed], components: [buttons] }).catch(() => {});
+  } else {
+    await interaction.editReply({ components: [] }).catch(() => {});
+  }
+}
 
 async function start() {
   try {
