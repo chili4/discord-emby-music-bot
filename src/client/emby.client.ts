@@ -35,8 +35,11 @@ export class EmbyClient {
 
       logger.info(`Authenticated as ${res.data.User.Name} (${this.userId})`);
     } catch (err: any) {
-      logger.error('Emby authentication failed:', err?.response?.data || err?.message);
-      throw new Error('Failed to authenticate with Emby');
+      const detail = err?.response
+        ? `Status ${err.response.status}: ${JSON.stringify(err.response.data)}`
+        : err?.message || 'Unknown error';
+      logger.error(`Emby auth failed (${config.EMBY_URL}): ${detail}`);
+      throw new Error(`Failed to authenticate with Emby: ${detail}`);
     }
   }
 
