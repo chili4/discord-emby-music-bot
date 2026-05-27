@@ -110,7 +110,9 @@ export class EmbyClient {
 
   async getItem(itemId: string): Promise<EmbyItem | null> {
     try {
-      const res = await this.api.get<EmbyItem>(`/Users/${this.userId}/Items/${itemId}`);
+      const res = await this.api.get<EmbyItem>(`/Users/${this.userId}/Items/${itemId}`, {
+        params: { Fields: 'PrimaryImageAspectRatio,BasicSyncInfo,IsFavorite,DateCreated' },
+      });
       return res.data;
     } catch {
       return null;
@@ -296,7 +298,9 @@ export class EmbyClient {
 
   async isFavorite(itemId: string): Promise<boolean> {
     try {
-      const res = await this.api.get(`/Users/${this.userId}/Items/${itemId}`);
+      const res = await this.api.get(`/Users/${this.userId}/Items/${itemId}`, {
+        params: { Fields: 'PrimaryImageAspectRatio,BasicSyncInfo,IsFavorite,DateCreated' },
+      });
       const fav = !!res.data.IsFavorite;
       logger.debug(`isFavorite(${itemId})=${fav} (raw=${res.data.IsFavorite})`);
       return fav;
