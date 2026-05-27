@@ -2,7 +2,7 @@ import { ChatInputCommandInteraction, AutocompleteInteraction, SlashCommandBuild
 import { embyClient } from '../client/emby.client';
 import { playTracks, connectToChannel } from '../services/player.service';
 import { getQueue } from '../services/queue.service';
-import { Track } from '../models/types';
+import { Track, EmbyItem } from '../models/types';
 
 const playlistNameOption = (opt: any) =>
   opt.setName('name').setDescription('Playlist name').setRequired(true).setAutocomplete(true);
@@ -33,8 +33,15 @@ export const data = new SlashCommandBuilder()
     .addStringOption(playlistNameOption))
   .addSubcommand(sub => sub
     .setName('play')
-    .setDescription('Play a playlist')
-    .addStringOption(playlistNameOption))
+    .setDescription('Play a playlist (or "favorites")')
+    .addStringOption(playlistNameOption)
+    .addStringOption(opt => opt.setName('sort').setDescription('Sort order').setRequired(false)
+      .addChoices(
+        { name: 'Normal', value: 'normal' },
+        { name: 'Random', value: 'random' },
+        { name: 'A-Z', value: 'name' },
+        { name: 'Newest', value: 'newest' },
+      )))
   .addSubcommand(sub => sub
     .setName('delete')
     .setDescription('Delete a playlist')
@@ -124,18 +131,42 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
     await interaction.editReply({ embeds: [embed] });
 
   } else if (sub === 'play') {
-    const playlist = await resolvePlaylist(interaction);
-    if (!playlist) return;
+    const name = interaction.options.getString('name', true);
+    const sort = interaction.options.getString('sort') || 'normal';
 
     if (!member?.voice?.channel) {
       await interaction.editReply({ embeds: [new EmbedBuilder().setColor(0xED4245).setDescription('❌ You must be in a voice channel')] });
       return;
     }
-    const items = await embyClient.getPlaylistItems(playlist.id);
+
+    let items: EmbyItem[];
+    let label: string;
+
+    if (name.toLowerCase() === 'favorites') {
+      items = await embyClient.getFavorites();
+      label = 'Favorites';
+    } else {
+      const playlist = await resolvePlaylist(interaction);
+      if (!playlist) return;
+      items = await embyClient.getPlaylistItems(playlist.id);
+      label = playlist.name;
+    }
+
     if (items.length === 0) {
-      await interaction.editReply({ embeds: [new EmbedBuilder().setColor(0x5865F2).setDescription(`**${playlist.name}** is empty.`)] });
+      await interaction.editReply({ embeds: [new EmbedBuilder().setColor(0x5865F2).setDescription(`**${label}** is empty.`)] });
       return;
     }
+
+    // Apply sort
+    let sorted = [...items];
+    if (sort === 'random') {
+      sorted.sort(() => Math.random() - 0.5);
+    } else if (sort === 'name') {
+      sorted.sort((a, b) => (a.Name || '').localeCompare(b.Name || ''));
+    } else if (sort === 'newest') {
+      sorted.sort((a, b) => (b.ProductionYear || 0) - (a.ProductionYear || 0));
+    }
+
     const queue = getQueue(guildId);
     if (!queue.connection) {
       const connection = await connectToChannel(member);
@@ -145,9 +176,10 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
       }
       queue.connection = { audioPlayer: null as any, connection, resource: null, startTime: 0 };
     }
-    const tracks = items.map(i => embyClient.itemToTrack(i));
+    const tracks = sorted.map(i => embyClient.itemToTrack(i));
     await playTracks(guildId, tracks, interaction.user.id, interaction.channel as any);
-    await interaction.editReply({ embeds: [new EmbedBuilder().setColor(0x57F287).setDescription(`▶️ Playing **${playlist.name}** (${tracks.length} tracks)`)] });
+    const sortLabel = sort !== 'normal' ? ` (${sort})` : '';
+    await interaction.editReply({ embeds: [new EmbedBuilder().setColor(0x57F287).setDescription(`▶️ Playing **${label}**${sortLabel} — ${tracks.length} tracks`)] });
 
   } else if (sub === 'delete') {
     const playlist = await resolvePlaylist(interaction);
