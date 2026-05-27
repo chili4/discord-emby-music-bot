@@ -4,189 +4,121 @@ import { embyClient } from './client/emby.client';
 import { config } from './config';
 import { logger } from './utils/logger';
 import { getCommandData, registerCommands } from './commands';
-import { getQueue, getCurrentTrack, skipTrack, previousTrack } from './services/queue.service';
-import { playCurrent, setVolume, updateNowPlayingEmbed, stopNpTimer, setDiscordClient } from './services/player.service';
-import { nowPlayingEmbed, getPlaybackButtons } from './utils/embed';
+import {
+  getQueue, getCurrentTrack, skipTrack, previousTrack,
+} from './services/queue.service';
+import {
+  playCurrent, updateNowPlayingEmbed, stopNpTimer,
+} from './services/player.service';
 import { stopScrobble } from './services/scrobble.service';
+import { nowPlayingEmbed, getPlaybackButtons, simpleEmbed } from './utils/embed';
 
-process.on('unhandledRejection', (err) => {
-  logger.error('Unhandled rejection:', err);
-});
+process.on('unhandledRejection', (e) => logger.error('Unhandled rejection:', e));
 
 const commands = registerCommands();
-logger.debug(`Commands in collection: ${commands.map((_, k) => k).join(', ')}`);
-
-let nowPlayingMessageId: string | null = null; // Track the last NP message per guild
-const npMessages = new Map<string, string>();
-
-async function updateNowPlaying(guildId: string) {
-  const queue = getQueue(guildId);
-  const current = getCurrentTrack(guildId);
-  if (!current) return;
-
-  const position = queue.connection?.startTime
-    ? Math.floor((Date.now() - queue.connection.startTime) / 1000)
-    : 0;
-
-  const channelId = npMessages.get(guildId); // We'll set this when sending
-  // For button updates, the interaction channels are used directly
-}
+logger.debug(`Commands: ${commands.map((_, k) => k).join(', ')}`);
 
 async function registerSlashCommands() {
   try {
     const rest = new REST({ version: '10' }).setToken(config.DISCORD_TOKEN);
-    const data = getCommandData();
-    await rest.put(Routes.applicationCommands(discordClient.user!.id), { body: data });
-    logger.info(`Registered ${data.length} slash commands`);
-  } catch (err) {
-    logger.error('Failed to register slash commands:', err);
+    await rest.put(Routes.applicationCommands(discordClient.user!.id), { body: getCommandData() });
+    logger.info(`Registered ${getCommandData().length} slash commands`);
+  } catch (e) {
+    logger.error('Register failed:', e);
   }
 }
 
 discordClient.once(Events.ClientReady, async () => {
   logger.info(`Logged in as ${discordClient.user!.tag}`);
-  setDiscordClient(discordClient);
   await registerSlashCommands();
 });
 
 discordClient.on(Events.InteractionCreate, async (interaction) => {
-  logger.debug(`Interaction received: type=${interaction.type}, name=${(interaction as any).commandName || 'N/A'}, user=${interaction.user.tag}`);
-
   if (interaction.isCommand()) {
-    const cmdName = interaction.commandName;
-    logger.debug(`Command interaction: "${cmdName}"`);
-
-    if (!commands.has(cmdName)) {
-      logger.warn(`Command "${cmdName}" not found in collection. Available: ${commands.map((_, k) => k).join(', ')}`);
-      return;
-    }
-
-    const command = commands.get(cmdName)!;
-
-    try {
-      await command.execute(interaction);
-
-      // Track the channel for now-playing updates
-      if (cmdName === 'play' && interaction.channel) {
-        npMessages.set(interaction.guildId!, interaction.channel.id);
-      }
-    } catch (err: any) {
-      logger.error(`Error executing ${cmdName}:`, err?.stack || err?.message || err);
-      const reply = interaction.deferred || interaction.replied
-        ? interaction.editReply.bind(interaction)
-        : interaction.reply.bind(interaction);
-
-      await reply({
-        content: 'An error occurred while executing the command.',
-        ephemeral: true,
-      }).catch(() => {});
+    const cmd = commands.get(interaction.commandName);
+    if (!cmd) return logger.warn(`Unknown command: ${interaction.commandName}`);
+    try { await cmd.execute(interaction); } catch (e: any) {
+      logger.error(`Error ${interaction.commandName}:`, e?.stack || e?.message);
+      const r = interaction.deferred || interaction.replied
+        ? interaction.editReply.bind(interaction) : interaction.reply.bind(interaction);
+      await r({ embeds: [simpleEmbed('An error occurred.', 0xED4245)], ephemeral: true }).catch(() => {});
     }
   } else if (interaction.isAutocomplete()) {
-    const command = commands.get(interaction.commandName);
-    if (command?.autocomplete) {
-      try {
-        await command.autocomplete(interaction);
-      } catch (err) {
-        logger.error(`Autocomplete error for ${interaction.commandName}:`, err);
-        await interaction.respond([]).catch(() => {});
-      }
+    const cmd = commands.get(interaction.commandName);
+    if (cmd?.autocomplete) {
+      try { await cmd.autocomplete(interaction); } catch { await interaction.respond([]).catch(() => {}); }
     }
   } else if (interaction.isButton()) {
     await handleButton(interaction);
-  } else {
-    logger.debug(`Unhandled interaction type: ${interaction.type}`);
   }
 });
 
-async function handleButton(interaction: ButtonInteraction): Promise<void> {
+async function handleButton(interaction: ButtonInteraction) {
   await interaction.deferUpdate();
-  const guildId = interaction.guildId!;
-  const queue = getQueue(guildId);
+  const g = interaction.guildId!;
+  const q = getQueue(g);
 
   switch (interaction.customId) {
     case 'pause': {
-      if (queue.connection?.audioPlayer) {
-        queue.connection.audioPlayer.pause();
-        queue.isPaused = true;
+      if (q.connection?.startTime) {
+        q.seekOffset += Math.floor((Date.now() - q.connection.startTime) / 1000);
       }
+      q.connection?.audioPlayer?.pause();
+      q.isPaused = true;
       break;
     }
     case 'resume': {
-      if (queue.connection?.audioPlayer) {
-        queue.connection.audioPlayer.unpause();
-        queue.isPaused = false;
-        queue.connection.startTime = Date.now();
-      }
+      q.connection?.audioPlayer?.unpause();
+      q.isPaused = false;
+      q.connection!.startTime = Date.now();
       break;
     }
     case 'next': {
-      if (queue.connection?.audioPlayer) {
-        queue.connection.audioPlayer.stop();
-      }
-      const next = skipTrack(guildId);
-      if (next) {
-        queue.seekOffset = 0;
-        await playCurrent(guildId, interaction.channel as any);
-      }
+      q.connection?.audioPlayer?.stop();
+      const n = skipTrack(g);
+      if (n) { q.seekOffset = 0; await playCurrent(g, interaction.channel as any); }
       break;
     }
     case 'prev': {
-      if (queue.currentIndex > 0) {
-        previousTrack(guildId);
-        if (queue.connection?.audioPlayer) {
-          queue.connection.audioPlayer.stop();
-        }
-        queue.seekOffset = 0;
-        await playCurrent(guildId, interaction.channel as any);
-      } else {
-        queue.seekOffset = 0;
-        if (queue.connection?.audioPlayer) {
-          queue.connection.audioPlayer.stop();
-        }
-        await playCurrent(guildId, interaction.channel as any);
-      }
+      previousTrack(g);
+      q.seekOffset = 0;
+      q.connection?.audioPlayer?.stop();
+      await playCurrent(g, interaction.channel as any);
       break;
     }
     case 'stop': {
-      if (queue.connection?.audioPlayer) {
-        queue.connection.audioPlayer.stop(true);
-      }
-      queue.items = [];
-      queue.currentIndex = -1;
-      queue.isPlaying = false;
-      queue.isPaused = false;
-      stopScrobble(guildId);
-      stopNpTimer(guildId);
-      await interaction.editReply({ embeds: [] as any, components: [] }).catch(() => {});
+      q.connection?.audioPlayer?.stop(true);
+      q.items = [];
+      q.currentIndex = -1;
+      q.isPlaying = false;
+      q.isPaused = false;
+      stopScrobble(g);
+      stopNpTimer(g);
+      await interaction.editReply({ embeds: [], components: [] }).catch(() => {});
       return;
     }
     case 'fav': {
-      const current = getCurrentTrack(guildId);
-      if (current) {
-        await embyClient.addFavorite(current.track.id);
-      }
+      const cur = getCurrentTrack(g);
+      if (cur) await embyClient.addFavorite(cur.track.id);
       break;
     }
     case 'loop': {
       const modes: ('none' | 'all' | 'one')[] = ['none', 'all', 'one'];
-      const idx = modes.indexOf(queue.loopMode);
-      queue.loopMode = modes[(idx + 1) % modes.length];
+      q.loopMode = modes[(modes.indexOf(q.loopMode) + 1) % 3];
       break;
     }
   }
 
-  await updateNowPlayingEmbed(guildId);
+  await updateNowPlayingEmbed(g);
   await interaction.editReply({}).catch(() => {});
 }
 
-async function start() {
+(async () => {
   try {
     await embyClient.authenticate();
     await discordClient.login(config.DISCORD_TOKEN);
-  } catch (err) {
-    logger.error('Failed to start bot:', err);
+  } catch (e) {
+    logger.error('Startup failed:', e);
     process.exit(1);
   }
-}
-
-start();
+})();

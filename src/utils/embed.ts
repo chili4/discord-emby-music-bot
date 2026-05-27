@@ -2,59 +2,52 @@ import { EmbedBuilder, ButtonBuilder, ButtonStyle, ActionRowBuilder, ColorResolv
 import { Track } from '../models/types';
 import { config } from '../config';
 
-const COLORS = {
-  primary: 0x5865F2 as ColorResolvable,
-  success: 0x57F287 as ColorResolvable,
-  warning: 0xFEE75C as ColorResolvable,
-  error: 0xED4245 as ColorResolvable,
-  info: 0x5865F2 as ColorResolvable,
-};
-
 function getImageUrl(track: Track): string | null {
   if (track.imageTag && track.id) {
-    return `${config.EMBY_URL}/Items/${track.id}/Images/Primary?tag=${track.imageTag}&quality=90&fillHeight=300&fillWidth=300`;
+    return `${config.EMBY_URL}/Items/${track.id}/Images/Primary?tag=${track.imageTag}&quality=90&fillHeight=600&fillWidth=600`;
   }
   return null;
 }
 
-function formatTime(seconds: number): string {
-  const mins = Math.floor(seconds / 60);
-  const secs = seconds % 60;
-  return `${mins}:${String(secs).padStart(2, '0')}`;
+function fmt(sec: number): string {
+  const m = Math.floor(sec / 60);
+  const s = Math.floor(sec % 60);
+  return `${m}:${String(s).padStart(2, '0')}`;
 }
 
-function progressBar(current: number, total: number, length = 12): string {
-  if (total <= 0) return '▱'.repeat(length);
-  const filled = Math.round((current / total) * length);
-  return '▰'.repeat(filled) + '▱'.repeat(length - filled);
+function bar(current: number, total: number, len = 14): string {
+  if (total <= 0) return '▱'.repeat(len);
+  const f = Math.round((current / total) * len);
+  return '▰'.repeat(f) + '▱'.repeat(len - f);
 }
 
 export function nowPlayingEmbed(track: Track, position: number, volume: number, requestedBy?: string) {
-  const embed = new EmbedBuilder()
-    .setColor(COLORS.success)
-    .setAuthor({ name: 'Now Playing', iconURL: 'https://cdn.discordapp.com/emojis/1015745804344639628.gif' })
+  const pos = Math.min(position, track.duration);
+  const progress = bar(pos, track.duration);
+  const dur = track.duration > 0 ? `${fmt(pos)} / ${fmt(track.duration)}` : '0:00 / 0:00';
+
+  const e = new EmbedBuilder()
+    .setColor(0x2B2D31 as ColorResolvable)
     .setTitle(track.name)
     .addFields(
       { name: 'Artist', value: track.artist || 'Unknown', inline: true },
       { name: 'Album', value: track.album || 'Unknown', inline: true },
-      { name: 'Duration', value: `${progressBar(position, track.duration)} \`${formatTime(position)} / ${formatTime(track.duration)}\``, inline: false },
-      { name: 'Volume', value: `${volume}%`, inline: true },
+      { name: '\u200B', value: '\u200B', inline: true },
+      { name: `${progress}`, value: `\`${dur}\``, inline: false },
     );
 
   if (requestedBy) {
-    embed.addFields({ name: 'Requested', value: `<@!${requestedBy}>`, inline: true });
+    e.setFooter({ text: `Requested by @${requestedBy}`, iconURL: undefined });
   }
 
-  const imageUrl = getImageUrl(track);
-  if (imageUrl) {
-    embed.setThumbnail(imageUrl);
-  }
+  const img = getImageUrl(track);
+  if (img) e.setThumbnail(img);
 
-  return embed;
+  return e;
 }
 
 export function getPlaybackButtons(isPaused: boolean, loopMode: string, isFav: boolean) {
-  const loopLabel = loopMode === 'all' ? '🔁' : loopMode === 'one' ? '🔂' : '➡️';
+  const loopEmoji = loopMode === 'all' ? '🔁' : loopMode === 'one' ? '🔂' : '➡️';
   const loopStyle = loopMode === 'none' ? ButtonStyle.Secondary : ButtonStyle.Primary;
   const pauseId = isPaused ? 'resume' : 'pause';
   const pauseEmoji = isPaused ? '▶️' : '⏸️';
@@ -67,53 +60,64 @@ export function getPlaybackButtons(isPaused: boolean, loopMode: string, isFav: b
   );
 
   const row2 = new ActionRowBuilder<ButtonBuilder>().addComponents(
-    new ButtonBuilder().setCustomId('loop').setEmoji(loopLabel).setStyle(loopStyle),
+    new ButtonBuilder().setCustomId('loop').setEmoji(loopEmoji).setStyle(loopStyle),
     new ButtonBuilder().setCustomId('fav').setEmoji(isFav ? '❤️' : '🤍').setStyle(ButtonStyle.Secondary),
   );
 
   return [row1, row2];
 }
 
-export function queueEmbed(tracks: Track[], currentIndex: number, page: number, totalPages: number): EmbedBuilder {
+export function queueEmbed(tracks: Track[], currentIndex: number, page: number, totalPages: number) {
   const start = page * 10;
-  const pageItems = tracks.slice(start, start + 10);
-  const lines = pageItems.map((t, i) => {
-    const pos = start + i;
-    const prefix = pos === currentIndex ? '**▶' : `${pos + 1}`;
-    return `${prefix}. ${t.name} — ${t.artist} (${formatTime(t.duration)})`;
+  const items = tracks.slice(start, start + 10);
+  const lines = items.map((t, i) => {
+    const n = start + i;
+    const p = n === currentIndex ? '**▸**' : `**${n + 1}**`;
+    return `${p} ${t.name} — ${t.artist} \`${fmt(t.duration)}\``;
   });
 
   return new EmbedBuilder()
-    .setColor(COLORS.primary)
-    .setTitle('Music Queue')
-    .setDescription(lines.join('\n') || 'Queue is empty')
-    .setFooter({ text: `Page ${page + 1}/${totalPages} • ${tracks.length} tracks` });
+    .setColor(0x2B2D31 as ColorResolvable)
+    .setTitle('Queue')
+    .setDescription(lines.join('\n') || 'No tracks in queue')
+    .setFooter({ text: `Page ${page + 1}/${totalPages} · ${tracks.length} tracks` });
 }
 
-export function trackAddedEmbed(track: Track, position: number): EmbedBuilder {
+export function statusEmbed(fields: { name: string; value: string }[]) {
   return new EmbedBuilder()
-    .setColor(COLORS.success)
-    .setDescription(`✅ Added **${track.name}** by ${track.artist} (position #${position + 1})`);
+    .setColor(0x2B2D31 as ColorResolvable)
+    .setTitle('Bot Status')
+    .addFields(fields);
 }
 
-export function errorEmbed(message: string): EmbedBuilder {
-  return new EmbedBuilder()
-    .setColor(COLORS.error)
-    .setDescription(`❌ ${message}`);
+export function simpleEmbed(desc: string, color: number = 0x2B2D31) {
+  return new EmbedBuilder().setColor(color as ColorResolvable).setDescription(desc);
 }
 
-export function helpEmbed(): EmbedBuilder {
-  const categories = [
-    { name: '🎵 Playback', value: '`/play` `/pause` `/stop` `/skip` `/previous` `/jump`' },
-    { name: '📋 Queue', value: '`/queue` `/remove` `/shuffle` `/clear`' },
-    { name: '🔍 Search', value: '`/search` `/random` `/fav` `/playlist`' },
-    { name: '🔊 Controls', value: '`/volume` `/summon` `/disconnect`' },
-    { name: 'ℹ️ Info', value: '`/nowplaying` `/status` `/lyrics` `/help`' },
-  ];
-
+export function helpEmbed() {
   return new EmbedBuilder()
-    .setColor(COLORS.primary)
-    .setTitle('Emby Music Bot - Commands')
-    .setDescription('Use `/` commands to control music playback from your Emby server.\nOr use the buttons below the Now Playing message!')
-    .addFields(categories);
+    .setColor(0x2B2D31 as ColorResolvable)
+    .setTitle('Emby Music Bot')
+    .setDescription(
+      '`/play` · Search & play music\n' +
+      '`/pause` · Pause / resume\n' +
+      '`/skip` · Next track\n' +
+      '`/previous` · Go back\n' +
+      '`/stop` · Stop & clear queue\n' +
+      '`/queue` · Show queue\n' +
+      '`/remove` · Remove from queue\n' +
+      '`/shuffle` · Shuffle queue\n' +
+      '`/volume` · Set volume\n' +
+      '`/seek` · Seek in track\n' +
+      '`/summon` · Join your channel\n' +
+      '`/disconnect` · Leave channel\n' +
+      '`/search` · Search music\n' +
+      '`/random` · Random tracks\n' +
+      '`/nowplaying` · Current track\n' +
+      '`/status` · Bot status\n' +
+      '`/lyrics` · Song lyrics\n' +
+      '`/fav` · Manage favorites\n' +
+      '`/playlist` · Manage playlists\n' +
+      '`/help` · This message',
+    );
 }

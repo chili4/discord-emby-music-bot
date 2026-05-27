@@ -9,102 +9,225 @@ import {
   joinVoiceChannel,
   NoSubscriberBehavior,
 } from '@discordjs/voice';
-import { spawn } from 'child_process';
-import { GuildMember, TextChannel, Client as DCClient } from 'discord.js';
+import { spawn, ChildProcess } from 'child_process';
+import { GuildMember, TextChannel, Message } from 'discord.js';
 import { embyClient } from '../client/emby.client';
 import { logger } from '../utils/logger';
 import { getQueue, getCurrentTrack, skipTrack } from './queue.service';
 import { startScrobble, stopScrobble } from './scrobble.service';
-import { config } from '../config';
-import { nowPlayingEmbed, getPlaybackButtons } from '../utils/embed';
-
-let _client: DCClient | null = null;
-export function setDiscordClient(c: DCClient) { _client = c; }
-function getClient(): DCClient | null { return _client; }
+import { nowPlayingEmbed, getPlaybackButtons, simpleEmbed } from '../utils/embed';
 
 const players = new Map<string, AudioPlayer>();
+const ffmpegProcesses = new Map<string, ChildProcess>();
 
-async function sendOrUpdateNowPlaying(guildId: string, textChannel?: import('discord.js').TextChannel) {
-  const queue = getQueue(guildId);
-  const current = getCurrentTrack(guildId);
-  if (!current) return;
+async function sendOrUpdateNp(guildId: string, channel?: TextChannel) {
+  const q = getQueue(guildId);
+  const cur = getCurrentTrack(guildId);
+  if (!cur) return;
 
-  const position = queue.connection?.startTime
-    ? queue.seekOffset + Math.floor((Date.now() - queue.connection.startTime) / 1000)
-    : 0;
-
-  const embed = nowPlayingEmbed(current.track, Math.min(position, current.track.duration), queue.volume, current.requestedBy);
-  const rows = getPlaybackButtons(queue.isPaused, queue.loopMode, false);
-
-  let targetChannel: import('discord.js').TextChannel | null = textChannel || null;
-  if (!targetChannel && queue.npChannelId && _client) {
-    const ch = _client.channels.cache.get(queue.npChannelId);
-    if (ch) targetChannel = ch as import('discord.js').TextChannel;
+  let pos = q.seekOffset;
+  if (q.connection?.startTime && !q.isPaused) {
+    pos += Math.floor((Date.now() - q.connection.startTime) / 1000);
   }
+  pos = Math.min(pos, cur.track.duration);
 
-  if (!targetChannel) return;
+  const embed = nowPlayingEmbed(cur.track, pos, q.volume, cur.requestedBy);
+  const rows = getPlaybackButtons(q.isPaused, q.loopMode, false);
 
-  if (queue.npMessageId) {
-    const existing = await targetChannel.messages.fetch(queue.npMessageId).catch(() => null);
-    if (existing) {
-      await existing.edit({ embeds: [embed], components: rows }).catch((e: any) => logger.warn(`NP update: ${e.message}`));
-      return;
+  const npMsgId = q.npMessageId;
+  const npChId = q.npChannelId;
+
+  if (npMsgId && npChId) {
+    const client = (await import('../client/discord.client')).discordClient;
+    const ch = client.channels.cache.get(npChId) as TextChannel | undefined;
+    if (ch) {
+      const msg = await ch.messages.fetch(npMsgId).catch(() => null);
+      if (msg) {
+        await msg.edit({ embeds: [embed], components: rows }).catch(() => {});
+        return;
+      }
     }
   }
 
-  const msg = await targetChannel.send({ embeds: [embed], components: rows }).catch((e: any) => {
-    logger.error(`NP send: ${e.message}`);
-    return null;
-  });
-
-  if (msg) {
-    queue.npMessageId = msg.id;
-    queue.npChannelId = msg.channelId;
+  if (channel) {
+    const msg = await channel.send({ embeds: [embed], components: rows }).catch((e: any) => {
+      logger.error(`Failed to send NP embed: ${e.message}`);
+      return null;
+    });
+    if (msg) {
+      q.npMessageId = msg.id;
+      q.npChannelId = msg.channelId;
+    }
   }
 }
 
 export function stopNpTimer(guildId: string) {
-  const queue = getQueue(guildId);
-  if (queue.npTimer) {
-    clearInterval(queue.npTimer);
-    queue.npTimer = null;
-  }
+  const q = getQueue(guildId);
+  if (q.npTimer) { clearInterval(q.npTimer); q.npTimer = null; }
 }
 
 function startNpTimer(guildId: string) {
-  const queue = getQueue(guildId);
   stopNpTimer(guildId);
-  queue.npTimer = setInterval(() => {
-    sendOrUpdateNowPlaying(guildId).catch(() => {});
-  }, 10_000);
+  const q = getQueue(guildId);
+  q.npTimer = setInterval(() => sendOrUpdateNp(guildId), 10_000);
+}
+
+export async function updateNowPlayingEmbed(guildId: string) {
+  await sendOrUpdateNp(guildId);
+}
+
+export async function connectToChannel(member: GuildMember): Promise<VoiceConnection | null> {
+  const ch = member.voice.channel;
+  if (!ch) return null;
+
+  logger.debug(`Joining voice channel "${ch.name}"`);
+  const conn = joinVoiceChannel({
+    channelId: ch.id,
+    guildId: ch.guildId,
+    adapterCreator: ch.guild.voiceAdapterCreator,
+    selfDeaf: false,
+  });
+
+  conn.on('debug', (m) => logger.debug(`[Voice] ${m}`));
+  conn.on(VoiceConnectionStatus.Connecting, () => logger.debug('[Voice] connecting'));
+  conn.on(VoiceConnectionStatus.Signalling, () => logger.debug('[Voice] signalling'));
+  conn.on(VoiceConnectionStatus.Ready, () => logger.debug('[Voice] ready'));
+  conn.on('error', (e) => logger.error(`[Voice] ${e.message}`));
+  conn.on(VoiceConnectionStatus.Disconnected, async () => {
+    try {
+      await Promise.race([
+        entersState(conn, VoiceConnectionStatus.Signalling, 5_000),
+        entersState(conn, VoiceConnectionStatus.Connecting, 5_000),
+      ]);
+    } catch {
+      if (conn.state.status === VoiceConnectionStatus.Disconnected) conn.destroy();
+    }
+  });
+
+  try {
+    await entersState(conn, VoiceConnectionStatus.Ready, 30_000);
+  } catch {
+    logger.error('[Voice] timeout connecting');
+    conn.destroy();
+    return null;
+  }
+
+  logger.info('Connected to voice');
+  return conn;
+}
+
+export async function playCurrent(guildId: string, textChannel?: TextChannel) {
+  const q = getQueue(guildId);
+  const cur = getCurrentTrack(guildId);
+  if (!cur || !q.connection) { logger.warn('playCurrent: no track or connection'); return; }
+
+  const url = embyClient.getStreamUrl(cur.track.id);
+  logger.debug(`Playing: ${cur.track.name} (id=${cur.track.id})`);
+
+  const vol = Math.round(Math.pow(q.volume / 100, 0.6) * 100);
+  const args: string[] = [
+    '-headers', `X-Emby-Token: ${embyClient.getAccessToken()}`,
+  ];
+  if (q.seekOffset > 0) args.push('-ss', String(q.seekOffset));
+  args.push(
+    '-i', url,
+    '-analyzeduration', '0',
+    '-loglevel', '0',
+    '-af', `volume=${vol}/100`,
+    '-acodec', 'libopus',
+    '-f', 'opus',
+    '-ar', '48000',
+    '-ac', '2',
+    '-b:a', '128k',
+    'pipe:1',
+  );
+
+  const ff = spawn('ffmpeg', args, { stdio: ['pipe', 'pipe', 'pipe'] });
+  ffmpegProcesses.set(guildId, ff);
+
+  const res = createAudioResource(ff.stdout, { inlineVolume: false });
+  const player = getAudioPlayer(guildId);
+  q.connection.audioPlayer = player;
+  q.connection.resource = res;
+  q.connection.startTime = Date.now();
+  q.isPlaying = true;
+  q.isPaused = false;
+  q.connection.connection.subscribe(player);
+  player.play(res);
+
+  embyClient.reportPlaybackStart(cur.track.id, cur.track.id);
+  startScrobble(guildId);
+  startNpTimer(guildId);
+
+  if (textChannel) await sendOrUpdateNp(guildId, textChannel);
+
+  ff.on('error', (e) => logger.error(`FFmpeg: ${e.message}`));
+  ff.on('exit', (code) => {
+    if (code !== 0 && code !== null) logger.debug(`FFmpeg exited (${code})`);
+    ffmpegProcesses.delete(guildId);
+  });
+  ff.stderr.on('data', (d: Buffer) => {
+    const m = d.toString().trim();
+    if (m) logger.debug(`FFmpeg: ${m.slice(0, 150)}`);
+  });
+  ff.stdin.on('error', () => {});
+}
+
+export async function playTracks(
+  guildId: string,
+  tracks: import('../models/types').Track[],
+  requestedBy: string,
+  channel: TextChannel,
+) {
+  const q = getQueue(guildId);
+  const wasEmpty = q.items.length === 0;
+  const pos = q.items.length;
+
+  for (const t of tracks) {
+    q.items.push({ track: t, requestedBy });
+  }
+
+  if (wasEmpty) {
+    q.currentIndex = 0;
+    await playCurrent(guildId, channel);
+  } else {
+    const msg = await channel.send({ embeds: [simpleEmbed(`Added **${tracks.length}** track${tracks.length > 1 ? 's' : ''} (#${pos + 1})`, 0x57F287)] }).catch(() => null);
+    if (msg) setTimeout(() => msg.delete().catch(() => {}), 15_000);
+  }
 }
 
 function getAudioPlayer(guildId: string): AudioPlayer {
   if (!players.has(guildId)) {
-    const player = createAudioPlayer({
-      behaviors: { noSubscriber: NoSubscriberBehavior.Play },
-    });
-    players.set(guildId, player);
+    const p = createAudioPlayer({ behaviors: { noSubscriber: NoSubscriberBehavior.Play } });
+    players.set(guildId, p);
 
-    player.on(AudioPlayerStatus.Idle, async () => {
-      const queue = getQueue(guildId);
-      if (queue.loopMode === 'one') {
-        playCurrent(guildId);
-        return;
-      }
+    p.on(AudioPlayerStatus.Idle, async () => {
+      const q = getQueue(guildId);
+      if (q.loopMode === 'one') { await playCurrent(guildId); return; }
       const next = skipTrack(guildId);
       if (next) {
-        playCurrent(guildId);
+        await playCurrent(guildId);
       } else {
-        queue.isPlaying = false;
-        queue.isPaused = false;
+        q.isPlaying = false;
+        q.isPaused = false;
         stopScrobble(guildId);
-        logger.debug(`Playback ended for guild ${guildId}`);
+        stopNpTimer(guildId);
+        // Update existing NP message to show stopped state
+        const cur = getCurrentTrack(guildId);
+        if (!cur && q.npMessageId && q.npChannelId) {
+          const client = (await import('../client/discord.client')).discordClient;
+          const ch = client.channels.cache.get(q.npChannelId) as TextChannel | undefined;
+          if (ch) {
+            const msg = await ch.messages.fetch(q.npMessageId).catch(() => null);
+            if (msg) await msg.edit({ components: [] }).catch(() => {});
+          }
+        }
       }
     });
 
-    player.on('error', (err) => {
-      logger.error(`Audio player error for guild ${guildId}:`, err.message);
+    p.on('error', (e) => {
+      logger.error(`AudioPlayer: ${e.message}`);
+      const q = getQueue(guildId);
       const next = skipTrack(guildId);
       if (next) playCurrent(guildId);
     });
@@ -112,197 +235,23 @@ function getAudioPlayer(guildId: string): AudioPlayer {
   return players.get(guildId)!;
 }
 
-export async function connectToChannel(member: GuildMember): Promise<VoiceConnection | null> {
-  const voiceChannel = member.voice.channel;
-  if (!voiceChannel) {
-    logger.warn('connectToChannel: member not in a voice channel');
-    return null;
-  }
-
-  logger.debug(`connectToChannel: attempting to join channel "${voiceChannel.name}" (${voiceChannel.id})`);
-
-  const connection = joinVoiceChannel({
-    channelId: voiceChannel.id,
-    guildId: voiceChannel.guildId,
-    adapterCreator: voiceChannel.guild.voiceAdapterCreator,
-    selfDeaf: false,
-  });
-
-  connection.on('debug', (msg) => logger.debug(`[Voice] ${msg}`));
-  connection.on(VoiceConnectionStatus.Connecting, () => logger.debug('[Voice] Connecting...'));
-  connection.on(VoiceConnectionStatus.Signalling, () => logger.debug('[Voice] Signalling...'));
-  connection.on(VoiceConnectionStatus.Ready, () => logger.debug('[Voice] Ready!'));
-  connection.on('error', (err) => logger.error(`[Voice] Error: ${err.message}`));
-
-  connection.on(VoiceConnectionStatus.Disconnected, async (oldState, newState) => {
-    logger.debug(`[Voice] Disconnected: ${oldState.status} -> ${newState.status}`);
-    try {
-      await Promise.race([
-        entersState(connection, VoiceConnectionStatus.Signalling, 5_000),
-        entersState(connection, VoiceConnectionStatus.Connecting, 5_000),
-      ]);
-    } catch {
-      if (connection.state.status === VoiceConnectionStatus.Disconnected) {
-        logger.debug('[Voice] Destroying stale connection');
-        connection.destroy();
-      }
-    }
-  });
-
-  try {
-    await entersState(connection, VoiceConnectionStatus.Ready, 30_000);
-  } catch (err) {
-    logger.error(`[Voice] Failed to ready within 30s (state: ${connection.state.status})`);
-    connection.destroy();
-    return null;
-  }
-
-  logger.info(`Connected to voice channel "${voiceChannel.name}"`);
-  return connection;
+export function setVolume(guildId: string, vol: number) {
+  getQueue(guildId).volume = Math.max(0, Math.min(150, vol));
 }
 
-export async function playCurrent(guildId: string, textChannel?: TextChannel): Promise<void> {
-  const queue = getQueue(guildId);
-  const current = getCurrentTrack(guildId);
-  if (!current || !queue.connection) {
-    logger.warn(`playCurrent: no current track or connection for guild ${guildId}`);
-    return;
-  }
-
-  const streamUrl = embyClient.getStreamUrl(current.track.id);
-  logger.debug(`Playing: ${current.track.name} (id=${current.track.id})`);
-
-  const volumeFilter = `volume=${Math.round(Math.pow(queue.volume / 100, 0.6) * 100)}/100`;
-
-  const ffmpegArgs = [
-    '-headers', `X-Emby-Token: ${embyClient.getAccessToken()}`,
-  ];
-
-  if (queue.seekOffset > 0) {
-    ffmpegArgs.push('-ss', String(queue.seekOffset));
-  }
-
-  ffmpegArgs.push(
-    '-i', streamUrl,
-    '-analyzeduration', '0',
-    '-loglevel', '0',
-    '-af', volumeFilter,
-    '-acodec', 'libopus',
-    '-f', 'opus',
-    '-ar', '48000',
-    '-ac', '2',
-    '-b:a', '128k',
-    '-application', 'audio',
-    'pipe:1',
-  );
-
-  logger.debug(`seekOffset: ${queue.seekOffset}s`);
-
-  logger.debug(`FFmpeg: ffmpeg ${ffmpegArgs.join(' ')}`);
-
-  const ffmpeg = spawn('ffmpeg', ffmpegArgs, { stdio: ['pipe', 'pipe', 'pipe'] });
-
-  const resource = createAudioResource(ffmpeg.stdout, {
-    inlineVolume: false,
-  });
-
-  const player = getAudioPlayer(guildId);
-  queue.connection.audioPlayer = player;
-
-  if (queue.connection.connection.state.status === VoiceConnectionStatus.Ready) {
-    queue.connection.connection.subscribe(player);
-  }
-
-  player.play(resource);
-
-  queue.connection.resource = resource;
-  queue.connection.startTime = Date.now();
-  queue.isPlaying = true;
-  queue.isPaused = false;
-
-  embyClient.reportPlaybackStart(current.track.id, current.track.id);
-  startScrobble(guildId);
-
-  if (textChannel) {
-    queue.seekOffset = 0;
-    await sendOrUpdateNowPlaying(guildId, textChannel);
-    startNpTimer(guildId);
-  }
-
-  ffmpeg.on('error', (err) => {
-    logger.error(`FFmpeg error: ${err.message}`);
-    if (textChannel) {
-      textChannel.send({ embeds: [new (require('discord.js').EmbedBuilder)().setColor(0xED4245).setDescription('❌ Error playing audio')] }).catch(() => {});
-    }
-  });
-
-  ffmpeg.on('exit', (code) => {
-    if (code !== 0) logger.warn(`FFmpeg exited with code ${code}`);
-  });
-
-  ffmpeg.stderr.on('data', (data: Buffer) => {
-    const msg = data.toString().trim();
-    if (msg) logger.debug(`FFmpeg: ${msg.slice(0, 200)}`);
-  });
-
-  ffmpeg.stdin.on('error', () => {});
-}
-
-export async function playTracks(
-  guildId: string,
-  tracks: import('../models/types').Track[],
-  requestedBy: string,
-  textChannel: TextChannel,
-): Promise<void> {
-  const queue = getQueue(guildId);
-  const wasEmpty = queue.items.length === 0;
-  const position = queue.items.length;
-
-  for (const track of tracks) {
-    addTrackToQueue(guildId, track, requestedBy);
-  }
-
-  if (wasEmpty) {
-    skipTrack(guildId);
-    await playCurrent(guildId, textChannel);
-  } else {
-    const count = tracks.length;
-    textChannel.send({
-      embeds: [new (require('discord.js').EmbedBuilder)()
-        .setColor(0x57F287)
-        .setDescription(`✅ Added **${count}** track${count > 1 ? 's' : ''} to the queue (position #${position + 1})`)],
-    }).catch(() => {});
-  }
-}
-
-function addTrackToQueue(guildId: string, track: import('../models/types').Track, requestedBy: string): void {
-  const queue = getQueue(guildId);
-  queue.items.push({ track, requestedBy });
-}
-
-export function setVolume(guildId: string, volume: number): void {
-  const queue = getQueue(guildId);
-  queue.volume = Math.max(0, Math.min(150, volume));
-}
-
-export async function updateNowPlayingEmbed(guildId: string) {
-  await sendOrUpdateNowPlaying(guildId);
-}
-
-export function disconnect(guildId: string): void {
-  const queue = getQueue(guildId);
-  if (queue.connection?.connection) {
+export function disconnect(guildId: string) {
+  const q = getQueue(guildId);
+  if (q.connection?.connection) {
     stopScrobble(guildId);
     stopNpTimer(guildId);
-    queue.connection.connection.destroy();
+    q.connection.connection.destroy();
   }
-  const player = players.get(guildId);
-  if (player) {
-    player.stop(true);
-    players.delete(guildId);
-  }
-  queue.npMessageId = null;
-  queue.npChannelId = null;
+  const ff = ffmpegProcesses.get(guildId);
+  if (ff) { ff.kill(); ffmpegProcesses.delete(guildId); }
+  const p = players.get(guildId);
+  if (p) { p.stop(true); players.delete(guildId); }
+  q.npMessageId = null;
+  q.npChannelId = null;
   const { removeQueue } = require('./queue.service');
   removeQueue(guildId);
 }
