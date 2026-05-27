@@ -72,7 +72,11 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
   await playTracks(guildId, tracksToPlay, interaction.user.id, interaction.channel as any);
   const count = tracksToPlay.length;
   const label = result.type === 'album' ? 'album' : result.type === 'playlist' ? 'playlist' : result.type === 'artist' ? 'artist' : 'track';
-  await interaction.editReply({ embeds: [new EmbedBuilder().setColor(0x57F287).setDescription(`✅ Playing **${first.name}**` + (count > 1 ? ` (${count} tracks)` : ''))] });
+  const desc = count > 1 ? `✅ Playing **${first.name}** (${count} tracks)` : `✅ Playing **${first.name}**`;
+  await interaction.editReply({ embeds: [new EmbedBuilder().setColor(0x57F287).setDescription(desc)] });
+  // Store channel for now-playing updates
+  const q = getQueue(guildId);
+  q.npChannelId = q.npChannelId || interaction.channelId;
   logger.debug('Play command completed');
 }
 

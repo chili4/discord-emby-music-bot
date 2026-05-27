@@ -56,15 +56,22 @@ export function nowPlayingEmbed(track: Track, position: number, volume: number, 
 export function getPlaybackButtons(isPaused: boolean, loopMode: string, isFav: boolean) {
   const loopLabel = loopMode === 'all' ? '🔁' : loopMode === 'one' ? '🔂' : '➡️';
   const loopStyle = loopMode === 'none' ? ButtonStyle.Secondary : ButtonStyle.Primary;
+  const pauseId = isPaused ? 'resume' : 'pause';
+  const pauseEmoji = isPaused ? '▶️' : '⏸️';
 
-  return new ActionRowBuilder<ButtonBuilder>().addComponents(
+  const row1 = new ActionRowBuilder<ButtonBuilder>().addComponents(
     new ButtonBuilder().setCustomId('prev').setEmoji('⏮️').setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder().setCustomId(isPaused ? 'resume' : 'pause').setEmoji(isPaused ? '▶️' : '⏸️').setStyle(ButtonStyle.Primary),
+    new ButtonBuilder().setCustomId(pauseId).setEmoji(pauseEmoji).setStyle(ButtonStyle.Primary),
     new ButtonBuilder().setCustomId('stop').setEmoji('⏹️').setStyle(ButtonStyle.Danger),
     new ButtonBuilder().setCustomId('next').setEmoji('⏭️').setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder().setCustomId('fav').setEmoji(isFav ? '❤️' : '🤍').setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder().setCustomId('loop').setEmoji(loopLabel).setStyle(loopStyle),
   );
+
+  const row2 = new ActionRowBuilder<ButtonBuilder>().addComponents(
+    new ButtonBuilder().setCustomId('loop').setEmoji(loopLabel).setStyle(loopStyle),
+    new ButtonBuilder().setCustomId('fav').setEmoji(isFav ? '❤️' : '🤍').setStyle(ButtonStyle.Secondary),
+  );
+
+  return [row1, row2];
 }
 
 export function queueEmbed(tracks: Track[], currentIndex: number, page: number, totalPages: number): EmbedBuilder {

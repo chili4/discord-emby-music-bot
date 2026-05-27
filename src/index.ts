@@ -5,7 +5,7 @@ import { config } from './config';
 import { logger } from './utils/logger';
 import { getCommandData, registerCommands } from './commands';
 import { getQueue, getCurrentTrack, skipTrack, previousTrack } from './services/queue.service';
-import { playCurrent, setVolume, updateNowPlayingEmbed, stopNpTimer } from './services/player.service';
+import { playCurrent, setVolume, updateNowPlayingEmbed, stopNpTimer, setDiscordClient } from './services/player.service';
 import { nowPlayingEmbed, getPlaybackButtons } from './utils/embed';
 import { stopScrobble } from './services/scrobble.service';
 
@@ -45,6 +45,7 @@ async function registerSlashCommands() {
 
 discordClient.once(Events.ClientReady, async () => {
   logger.info(`Logged in as ${discordClient.user!.tag}`);
+  setDiscordClient(discordClient);
   await registerSlashCommands();
 });
 

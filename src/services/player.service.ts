@@ -10,14 +10,17 @@ import {
   NoSubscriberBehavior,
 } from '@discordjs/voice';
 import { spawn } from 'child_process';
-import { GuildMember, TextChannel } from 'discord.js';
+import { GuildMember, TextChannel, Client as DCClient } from 'discord.js';
 import { embyClient } from '../client/emby.client';
 import { logger } from '../utils/logger';
 import { getQueue, getCurrentTrack, skipTrack } from './queue.service';
 import { startScrobble, stopScrobble } from './scrobble.service';
 import { config } from '../config';
 import { nowPlayingEmbed, getPlaybackButtons } from '../utils/embed';
-import { EmbedBuilder } from 'discord.js';
+
+let _client: DCClient | null = null;
+export function setDiscordClient(c: DCClient) { _client = c; }
+function getClient(): DCClient | null { return _client; }
 
 const players = new Map<string, AudioPlayer>();
 
@@ -31,25 +34,32 @@ async function sendOrUpdateNowPlaying(guildId: string, textChannel?: import('dis
     : 0;
 
   const embed = nowPlayingEmbed(current.track, Math.min(position, current.track.duration), queue.volume, current.requestedBy);
-  const buttons = getPlaybackButtons(queue.isPaused, queue.loopMode, false);
+  const rows = getPlaybackButtons(queue.isPaused, queue.loopMode, false);
 
-  if (queue.npMessageId && queue.npChannelId) {
-    const channel = textChannel?.client.channels.cache.get(queue.npChannelId) as import('discord.js').TextChannel | undefined;
-    if (channel) {
-      const msg = await channel.messages.fetch(queue.npMessageId).catch(() => null);
-      if (msg) {
-        await msg.edit({ embeds: [embed], components: [buttons] }).catch(() => {});
-        return;
-      }
+  let targetChannel: import('discord.js').TextChannel | null = textChannel || null;
+  if (!targetChannel && queue.npChannelId && _client) {
+    const ch = _client.channels.cache.get(queue.npChannelId);
+    if (ch) targetChannel = ch as import('discord.js').TextChannel;
+  }
+
+  if (!targetChannel) return;
+
+  if (queue.npMessageId) {
+    const existing = await targetChannel.messages.fetch(queue.npMessageId).catch(() => null);
+    if (existing) {
+      await existing.edit({ embeds: [embed], components: rows }).catch((e: any) => logger.warn(`NP update: ${e.message}`));
+      return;
     }
   }
 
-  if (textChannel) {
-    const msg = await textChannel.send({ embeds: [embed], components: [buttons] }).catch(() => null);
-    if (msg) {
-      queue.npMessageId = msg.id;
-      queue.npChannelId = msg.channelId;
-    }
+  const msg = await targetChannel.send({ embeds: [embed], components: rows }).catch((e: any) => {
+    logger.error(`NP send: ${e.message}`);
+    return null;
+  });
+
+  if (msg) {
+    queue.npMessageId = msg.id;
+    queue.npChannelId = msg.channelId;
   }
 }
 
