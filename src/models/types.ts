@@ -87,6 +87,7 @@ export interface QueueState {
   skipGuard: boolean;
   processingEnd: boolean;
   playerGeneration: number;
+  playGuard: boolean;
 }
 
 export interface AudioPlayerConnection {

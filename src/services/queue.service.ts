@@ -22,6 +22,7 @@ export function getQueue(guildId: string): QueueState {
       skipGuard: false,
       processingEnd: false,
       playerGeneration: 0,
+      playGuard: false,
     });
   }
   return queues.get(guildId)!;

@@ -72,6 +72,15 @@ export async function playCurrent(guildId: string, channel?: TextChannel) {
     return;
   }
 
+  // Play guard: prevent reentrant playCurrent calls (e.g. if Playing event
+  // fires twice due to a race, or if a button triggers playCurrent while
+  // another playCurrent is still running).
+  if (q.playGuard) {
+    logger.debug('playCurrent: playGuard active, skipping');
+    return;
+  }
+  q.playGuard = true;
+
   q.processingEnd = false;
 
   const url = embyClient.getStreamUrl(cur.track.id, q.seekOffset);
@@ -170,6 +179,8 @@ export async function playCurrent(guildId: string, channel?: TextChannel) {
     if (storedChannel) await sendNP(storedChannel, guildId);
   }
 
+  q.playGuard = false;
+
   ff.on('error', (e) => logger.error(`FF: ${e.message}`));
   ff.on('exit', (code) => {
     q.lastFfExitCode = code;
@@ -261,11 +272,14 @@ function getAudioPlayer(guildId: string): AudioPlayer {
         return;
       }
 
-      // If FFmpeg errored, skip to next track (don't retry same)
+      // If FFmpeg errored, skip to next track immediately (don't wait).
+      // Reset playingStartTime so the new track shows correct position from the start.
       const isError = q.lastFfExitCode !== null && q.lastFfExitCode !== 0;
       if (isError) {
         logger.debug(`FFmpeg error (${q.lastFfExitCode}), skipping to next track`);
         q.lastFfExitCode = null;
+        q.connection!.playingStartTime = 0;
+        q.connection!.startTime = 0;
         const next = skipTrack(guildId);
         if (next) {
           q.seekOffset = 0;
@@ -286,6 +300,8 @@ function getAudioPlayer(guildId: string): AudioPlayer {
 
       if (q.loopMode === 'one') {
         q.seekOffset = 0;
+        q.connection!.playingStartTime = 0;
+        q.connection!.startTime = 0;
         await disableNP(guildId);
         await playCurrent(guildId);
         q.processingEnd = false;
@@ -295,6 +311,8 @@ function getAudioPlayer(guildId: string): AudioPlayer {
       const next = skipTrack(guildId);
       if (next) {
         q.seekOffset = 0;
+        q.connection!.playingStartTime = 0;
+        q.connection!.startTime = 0;
         await disableNP(guildId);
         await playCurrent(guildId);
       } else {
@@ -335,6 +353,7 @@ export async function stopAndClear(guildId: string) {
   q.isPaused = false;
   q.seekOffset = 0;
   q.playerGeneration = 0;
+  q.playGuard = false;
   stopScrobble(guildId);
   stopNpTimer(guildId);
   if (q.connection?.audioPlayer) {
@@ -359,6 +378,7 @@ export async function clearUpcoming(guildId: string) {
   q.isPaused = false;
   q.seekOffset = 0;
   q.playerGeneration = 0;
+  q.playGuard = false;
   stopScrobble(guildId);
   stopNpTimer(guildId);
   if (q.connection?.audioPlayer) {
