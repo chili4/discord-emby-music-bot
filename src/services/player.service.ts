@@ -72,140 +72,132 @@ export async function playCurrent(guildId: string, channel?: TextChannel) {
     return;
   }
 
-  // Play guard: prevent reentrant playCurrent calls (e.g. if Playing event
-  // fires twice due to a race, or if a button triggers playCurrent while
-  // another playCurrent is still running).
+  // Play guard: prevent reentrant playCurrent calls
   if (q.playGuard) {
     logger.debug('playCurrent: playGuard active, skipping');
     return;
   }
   q.playGuard = true;
+  try {
+    // Reset per-track state before sendNP or anything else reads it.
+    q.connection!.playingStartTime = 0;
+    q.connection!.startTime = 0;
+    q.lastFfExitCode = null;
+    q.ffmpegErrorCount = 0;
 
-  q.processingEnd = false;
+    stopNpTimer(guildId);
 
-  const url = embyClient.getStreamUrl(cur.track.id, q.seekOffset);
-  logger.debug(`Playing: ${cur.track.name} (id=${cur.track.id})`);
+    q.processingEnd = false;
 
-  const vol = Math.round(Math.pow(q.volume / 100, 0.6) * 100);
-  const args: string[] = [
-    '-user_agent', 'VLC/3.0.20',
-    '-headers', `X-Emby-Token: ${embyClient.getAccessToken()}\r\n`,
-  ];
-  if (q.seekOffset > 0) {
-    args.push('-ss', String(q.seekOffset));
-  }
-  args.push(
-    '-i', url,
-    '-loglevel', 'warning',
-    '-af', `volume=${vol}/100`,
-    '-acodec', 'libopus',
-    '-f', 'opus',
-    '-ar', '48000',
-    '-ac', '2',
-    '-b:a', '128k',
-    'pipe:1',
-  );
+    const url = embyClient.getStreamUrl(cur.track.id, q.seekOffset);
+    logger.debug(`Playing: ${cur.track.name} (id=${cur.track.id})`);
 
-  // Wait for old FFmpeg to fully exit before spawning a new one.
-  // This ensures the old resource's internal 'end' listener fires
-  // while the player is Idle, not while Playing (prevents zombie listener).
-  const oldFf = ffmpegProcesses.get(guildId);
-  if (oldFf) {
-    ffmpegProcesses.delete(guildId);
-    if (oldFf.exitCode === null && oldFf.signalCode === null) {
-      oldFf.kill();
-      await new Promise<void>(resolve => oldFf.once('exit', () => resolve()));
+    const vol = Math.round(Math.pow(q.volume / 100, 0.6) * 100);
+    const args: string[] = [
+      '-user_agent', 'VLC/3.0.20',
+      '-headers', `X-Emby-Token: ${embyClient.getAccessToken()}\r\n`,
+    ];
+    if (q.seekOffset > 0) {
+      args.push('-ss', String(q.seekOffset));
     }
-  }
-  // Reentry guard cleared: any zombie Idle during the await was discarded,
-  // subsequent Idle events (new FFmpeg crash, etc.) can be processed normally.
+    args.push(
+      '-i', url,
+      '-loglevel', 'warning',
+      '-af', `volume=${vol}/100`,
+      '-acodec', 'libopus',
+      '-f', 'opus',
+      '-ar', '48000',
+      '-ac', '2',
+      '-b:a', '128k',
+      'pipe:1',
+    );
 
-  const ff = spawn('ffmpeg', args, { stdio: ['pipe', 'pipe', 'pipe'] });
-  ffmpegProcesses.set(guildId, ff);
-
-  ff.stdout?.on('error', () => {}); // Prevent ERR_STREAM_PREMATURE_CLOSE crash
-
-  let stderrBuf = '';
-  ff.stderr?.on('data', (d: Buffer) => {
-    stderrBuf += d.toString();
-    if (stderrBuf.length > 2048) stderrBuf = stderrBuf.slice(-1024);
-  });
-
-  const res = createAudioResource(ff.stdout, { inlineVolume: false });
-  const player = getAudioPlayer(guildId);
-  q.connection.audioPlayer = player;
-  q.connection.resource = res;
-  q.isPlaying = true;
-  q.isPaused = false;
-
-  if (q.connection.connection.state.status === VoiceConnectionStatus.Ready) {
-    q.connection.connection.subscribe(player);
-  }
-
-  // Reset guards BEFORE play so the old player (now Idle) sees skipGuard=false
-  // and processes the zombie end event naturally, while new events process normally.
-  q.skipGuard = false;
-  q.processingEnd = false;
-  q.playerGeneration++;
-
-  // Cancel any pending Playing event from a previous track to prevent
-  // stale sendNP from the old player after the new track has started.
-  player.removeAllListeners('playing');
-
-  player.play(res);
-
-  // Remove -re: let FFmpeg read as fast as possible, no artificial slowdown.
-  // startTime and timers are set when audio actually starts playing (Playing state).
-
-  let timersStarted = false;
-  player.on(AudioPlayerStatus.Playing, () => {
-    if (timersStarted) return;
-    timersStarted = true;
-    q.connection!.startTime = Date.now();
-    q.connection!.playingStartTime = Date.now();
-    setTimeout(() => {
-      startScrobble(guildId);
-      startNpTimer(guildId);
-    }, 3_000);
-  });
-
-  // Reset FFmpeg error tracking on new track
-  q.ffmpegErrorCount = 0;
-
-  if (channel) {
-    await sendNP(channel, guildId);
-  } else {
-    const storedChannel = await resolveStoredChannel(guildId);
-    if (storedChannel) await sendNP(storedChannel, guildId);
-  }
-
-  q.playGuard = false;
-
-  ff.on('error', (e) => logger.error(`FF: ${e.message}`));
-  ff.on('exit', (code) => {
-    q.lastFfExitCode = code;
-    if (code !== 0 && code !== null) {
-      // If skipGuard is true, this FFmpeg was killed intentionally — not an error
-      if (q.skipGuard) {
-        logger.debug(`FF killed (exit ${code}) — expected during skip`);
-      } else {
-        if (stderrBuf.length > 1900) {
-          for (let i = 0; i < stderrBuf.length; i += 1500) {
-            logger.warn(`FF stderr[${i}]: ${stderrBuf.slice(i, i + 1500)}`);
-          }
-        } else {
-          logger.warn(`FF stderr: ${stderrBuf}`);
-        }
-        q.ffmpegErrorCount++;
-        logger.warn(`FF exited ${code} (error #${q.ffmpegErrorCount})`);
-        if (q.ffmpegErrorCount >= 3) {
-          logger.error('Too many FFmpeg errors, stopping playback');
-          stopAndClear(guildId);
-        }
+    const oldFf = ffmpegProcesses.get(guildId);
+    if (oldFf) {
+      if (oldFf.exitCode === null && oldFf.signalCode === null) {
+        oldFf.kill();
+        await new Promise<void>(resolve => oldFf.once('exit', () => resolve()));
       }
     }
-    ffmpegProcesses.delete(guildId);
-  });
+
+    const ff = spawn('ffmpeg', args, { stdio: ['pipe', 'pipe', 'pipe'] });
+    ffmpegProcesses.set(guildId, ff);
+
+    ff.stdout?.on('error', () => {});
+
+    let stderrBuf = '';
+    ff.stderr?.on('data', (d: Buffer) => {
+      stderrBuf += d.toString();
+      if (stderrBuf.length > 2048) stderrBuf = stderrBuf.slice(-1024);
+    });
+
+    const res = createAudioResource(ff.stdout, { inlineVolume: false });
+    const player = getAudioPlayer(guildId);
+    q.connection.audioPlayer = player;
+    q.connection.resource = res;
+    q.isPlaying = true;
+    q.isPaused = false;
+
+    if (q.connection.connection.state.status === VoiceConnectionStatus.Ready) {
+      q.connection.connection.subscribe(player);
+    }
+
+    q.skipGuard = false;
+    q.processingEnd = false;
+    q.playerGeneration++;
+
+    player.removeAllListeners('playing');
+
+    let timersStarted = false;
+    player.on(AudioPlayerStatus.Playing, () => {
+      if (timersStarted) return;
+      timersStarted = true;
+      q.connection!.startTime = Date.now();
+      q.connection!.playingStartTime = Date.now();
+      setTimeout(() => {
+        startScrobble(guildId);
+        startNpTimer(guildId);
+      }, 3_000);
+    });
+
+    player.play(res);
+
+    if (channel) {
+      await sendNP(channel, guildId);
+    } else {
+      const storedChannel = await resolveStoredChannel(guildId);
+      if (storedChannel) await sendNP(storedChannel, guildId);
+    }
+
+    ff.on('error', (e) => logger.error(`FF: ${e.message}`));
+    ff.on('exit', (code) => {
+      q.lastFfExitCode = code;
+      if (code !== 0 && code !== null) {
+        if (q.skipGuard) {
+          logger.debug(`FF killed (exit ${code}) — expected during skip`);
+        } else {
+          if (stderrBuf.length > 1900) {
+            for (let i = 0; i < stderrBuf.length; i += 1500) {
+              logger.warn(`FF stderr[${i}]: ${stderrBuf.slice(i, i + 1500)}`);
+            }
+          } else {
+            logger.warn(`FF stderr: ${stderrBuf}`);
+          }
+          q.ffmpegErrorCount++;
+          logger.warn(`FF exited ${code} (error #${q.ffmpegErrorCount})`);
+          if (q.ffmpegErrorCount >= 3) {
+            logger.error('Too many FFmpeg errors, stopping playback');
+            stopAndClear(guildId);
+          }
+        }
+      }
+      if (ffmpegProcesses.get(guildId) === ff) {
+        ffmpegProcesses.delete(guildId);
+      }
+    });
+  } finally {
+    q.playGuard = false;
+  }
 }
 
 async function resolveStoredChannel(guildId: string): Promise<TextChannel | null> {

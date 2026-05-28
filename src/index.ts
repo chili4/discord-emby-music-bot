@@ -93,14 +93,14 @@ async function handleButton(interaction: ButtonInteraction) {
     case 'next': {
       q.skipGuard = true;
       const n = skipTrack(g);
-      if (n) { q.seekOffset = 0; await playCurrent(g, interaction.channel as any); }
+      if (n) { q.seekOffset = 0; await playCurrent(g); }
       break;
     }
     case 'prev': {
       q.skipGuard = true;
       previousTrack(g);
       q.seekOffset = 0;
-      await playCurrent(g, interaction.channel as any);
+      await playCurrent(g);
       break;
     }
     case 'rewind': {
@@ -113,7 +113,7 @@ async function handleButton(interaction: ButtonInteraction) {
         q.connection!.playingStartTime = Date.now();
       } else {
         q.connection!.playingStartTime = Date.now();
-        await playCurrent(g, interaction.channel as any);
+        await playCurrent(g);
       }
       break;
     }
@@ -128,7 +128,7 @@ async function handleButton(interaction: ButtonInteraction) {
         q.connection!.playingStartTime = Date.now();
       } else {
         q.connection!.playingStartTime = Date.now();
-        await playCurrent(g, interaction.channel as any);
+        await playCurrent(g);
       }
       break;
     }
@@ -195,7 +195,7 @@ async function handleSelectMenu(interaction: any) {
         q.connection!.playingStartTime = Date.now();
       } else {
         q.connection!.playingStartTime = Date.now();
-        await playCurrent(g, interaction.channel as any);
+        await playCurrent(g);
       }
     }
   }
