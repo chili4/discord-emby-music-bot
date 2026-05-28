@@ -100,10 +100,10 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
     return;
   }
 
-  // 'now' flag: replace current queue and play immediately
+  // 'now' flag: replace upcoming tracks with the new selection, keep current playing
   if (now) {
-    const { stopAndClear } = await import('../services/player.service');
-    await stopAndClear(guildId);
+    const { clearUpcoming } = await import('../services/player.service');
+    await clearUpcoming(guildId);
     // Re-connect after clearing
     const connection = await connectToChannel(member);
     if (connection) {

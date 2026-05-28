@@ -125,7 +125,7 @@ export async function clearNP(guildId: string): Promise<void> {
 export function startNpTimer(guildId: string): void {
   stopNpTimer(guildId);
   const q = getQueue(guildId);
-  q.npTimer = setInterval(() => updateNP(guildId), 10_000);
+  q.npTimer = setInterval(() => updateNP(guildId), 1_000);
 }
 
 export function stopNpTimer(guildId: string): void {

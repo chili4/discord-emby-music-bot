@@ -112,7 +112,6 @@ export async function playCurrent(guildId: string, channel?: TextChannel) {
   }
   // Reentry guard cleared: any zombie Idle during the await was discarded,
   // subsequent Idle events (new FFmpeg crash, etc.) can be processed normally.
-  q.processingEnd = false;
 
   const ff = spawn('ffmpeg', args, { stdio: ['pipe', 'pipe', 'pipe'] });
   ffmpegProcesses.set(guildId, ff);
@@ -136,6 +135,13 @@ export async function playCurrent(guildId: string, channel?: TextChannel) {
   if (q.connection.connection.state.status === VoiceConnectionStatus.Ready) {
     q.connection.connection.subscribe(player);
   }
+
+  // Reset guards BEFORE play so the old player (now Idle) sees skipGuard=false
+  // and processes the zombie end event naturally, while new events process normally.
+  q.skipGuard = false;
+  q.processingEnd = false;
+  q.playerGeneration++;
+
   player.play(res);
 
   embyClient.reportPlaybackStart(cur.track.id, cur.track.id);
@@ -225,8 +231,13 @@ function getAudioPlayer(guildId: string): AudioPlayer {
     p.on(AudioPlayerStatus.Idle, async () => {
       const q = getQueue(guildId);
 
-      // Reentry guard: prevents zombie 'end' listener from a previous resource
-      // from double-processing after a natural track end.
+      // Player generation guard: discard events from a previous player's zombie
+      // listeners. Each playCurrent increments playerGeneration.
+      if (q.playerGeneration === 0) return;
+      const expectedGen = q.playerGeneration;
+
+      // Reentry guard: prevents this handler from running twice for the same
+      // natural track end (zombie listener + real Idle).
       if (q.processingEnd) return;
       q.processingEnd = true;
 
@@ -286,9 +297,10 @@ function getAudioPlayer(guildId: string): AudioPlayer {
       q.processingEnd = false;
     });
 
-    p.on('error', (e) => {
+    p.on('error', (e: Error) => {
       logger.error(`AP: ${e.message}`);
       const qq = getQueue(guildId);
+      if (qq.processingEnd) return;
       if (!qq.skipGuard) {
         qq.seekOffset = 0;
         const next = skipTrack(guildId);
@@ -305,12 +317,12 @@ export function setVolume(guildId: string, vol: number) {
 
 export async function stopAndClear(guildId: string) {
   const q = getQueue(guildId);
-  // Clear queue FIRST, then stop player
   q.items = [];
   q.currentIndex = -1;
   q.isPlaying = false;
   q.isPaused = false;
   q.seekOffset = 0;
+  q.playerGeneration = 0;
   stopScrobble(guildId);
   stopNpTimer(guildId);
   if (q.connection?.audioPlayer) {
@@ -319,6 +331,29 @@ export async function stopAndClear(guildId: string) {
   const ff = ffmpegProcesses.get(guildId);
   if (ff) { ff.kill(); ffmpegProcesses.delete(guildId); }
   await clearNP(guildId);
+}
+
+export async function clearUpcoming(guildId: string) {
+  const q = getQueue(guildId);
+  const cur = getCurrentTrack(guildId);
+  if (cur) {
+    q.items = [cur];
+    q.currentIndex = 0;
+  } else {
+    q.items = [];
+    q.currentIndex = -1;
+  }
+  q.isPlaying = false;
+  q.isPaused = false;
+  q.seekOffset = 0;
+  q.playerGeneration = 0;
+  stopScrobble(guildId);
+  stopNpTimer(guildId);
+  if (q.connection?.audioPlayer) {
+    q.connection.audioPlayer.stop(true);
+  }
+  const ff = ffmpegProcesses.get(guildId);
+  if (ff) { ff.kill(); ffmpegProcesses.delete(guildId); }
 }
 
 export async function disconnect(guildId: string) {

@@ -63,6 +63,8 @@ discordClient.on(Events.InteractionCreate, async (interaction) => {
     } else {
       console.warn(`[AUTOCOMPLETE] No handler for ${interaction.commandName}`);
     }
+  } else if (interaction.isSelectMenu()) {
+    await handleSelectMenu(interaction as any);
   } else if (interaction.isButton()) {
     await handleButton(interaction);
   }
@@ -151,6 +153,31 @@ async function handleButton(interaction: ButtonInteraction) {
       const modes: ('none' | 'all' | 'one')[] = ['none', 'all', 'one'];
       q.loopMode = modes[(modes.indexOf(q.loopMode) + 1) % 3];
       break;
+    }
+  }
+
+  await updateNP(g);
+  await interaction.editReply({}).catch(() => {});
+}
+
+async function handleSelectMenu(interaction: any) {
+  await interaction.deferUpdate();
+  const g = interaction.guildId!;
+  const q = getQueue(g);
+
+  if (interaction.customId === 'seekbar') {
+    const pct = parseInt(interaction.values[0], 10);
+    const cur = getCurrentTrack(g);
+    if (cur) {
+      const target = Math.floor((pct / 100) * cur.track.duration);
+      q.seekOffset = target;
+      q.skipGuard = true;
+      if (q.isPaused) {
+        q.connection!.startTime = Date.now();
+      } else {
+        q.connection!.startTime = Date.now();
+        await playCurrent(g, interaction.channel as any);
+      }
     }
   }
 

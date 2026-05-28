@@ -1,4 +1,4 @@
-import { EmbedBuilder, ButtonBuilder, ButtonStyle, ActionRowBuilder } from 'discord.js';
+import { EmbedBuilder, ButtonBuilder, ButtonStyle, ActionRowBuilder, SelectMenuBuilder, SelectMenuOptionBuilder, ComponentType } from 'discord.js';
 import { Track } from '../models/types';
 import { config } from '../config';
 import { embyClient } from '../client/emby.client';
@@ -73,7 +73,19 @@ export function getPlaybackButtons(
     new ButtonBuilder().setCustomId('fav').setEmoji(isFav ? '❤️' : '🤍').setLabel('Fav').setStyle(ButtonStyle.Secondary),
   );
 
-  return [row1, row2];
+  const row3 = new ActionRowBuilder<SelectMenuBuilder>().addComponents(
+    new SelectMenuBuilder()
+      .setCustomId('seekbar')
+      .setPlaceholder('⏩ Seek to position')
+      .addOptions(
+        [0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100].map(p => ({
+          label: `${p}%`,
+          value: String(p),
+        })),
+      ),
+  );
+
+  return [row1, row2, row3];
 }
 
 export function queueEmbed(tracks: Track[], currentIndex: number, page: number, totalPages: number) {

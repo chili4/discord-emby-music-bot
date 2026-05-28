@@ -21,6 +21,7 @@ export function getQueue(guildId: string): QueueState {
       ffmpegErrorCount: 0,
       skipGuard: false,
       processingEnd: false,
+      playerGeneration: 0,
     });
   }
   return queues.get(guildId)!;
