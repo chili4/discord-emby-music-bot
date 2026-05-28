@@ -159,10 +159,11 @@ export async function playCurrent(guildId: string, channel?: TextChannel) {
       timersStarted = true;
       q.connection!.startTime = Date.now();
       q.connection!.playingStartTime = Date.now();
-      setTimeout(() => {
-        startScrobble(guildId);
-        startNpTimer(guildId);
-      }, 3_000);
+      // Start NP timer immediately when playback begins so the progress bar
+      // updates from the first second (no 3s gap where position stays at 0).
+      startNpTimer(guildId);
+      // Scrobble still needs a small delay to ensure Emby accepts the report.
+      setTimeout(() => startScrobble(guildId), 3_000);
     });
 
     // Play BEFORE awaiting old FFmpeg — the player switches to the new
@@ -180,6 +181,13 @@ export async function playCurrent(guildId: string, channel?: TextChannel) {
       const storedChannel = await resolveStoredChannel(guildId);
       if (storedChannel) await sendNP(storedChannel, guildId);
     }
+
+    // Start timer immediately so the progress bar updates even during the
+    // FFmpeg buffering gap (before Playing fires). While playingStartTime
+    // is 0 (not yet set by Playing), calcPosition returns seekOffset only
+    // (0 for fresh tracks), so the NP faithfully shows 0:00 until audio
+    // actually starts.
+    startNpTimer(guildId);
 
     ff.on('error', (e) => logger.error(`FF: ${e.message}`));
     ff.on('exit', (code) => {
