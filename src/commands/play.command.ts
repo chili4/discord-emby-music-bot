@@ -107,15 +107,48 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
     return;
   }
 
-  // 'now' flag: replace upcoming tracks with the new selection, keep current playing
   if (now) {
-    const { clearUpcoming } = await import('../services/player.service');
-    await clearUpcoming(guildId);
-    // Re-connect after clearing
+    // `now` replaces only the current track. The old current becomes previous
+    // (accessible via ⏮️), and all upcoming tracks are preserved.
+    const queue = getQueue(guildId);
+    const savedItems = [...queue.items];
+    const savedIndex = queue.currentIndex;
+    const hadTracks = savedItems.length > 0;
+
+    // Stop playback and kill FFmpeg (stopAndClear also wipes items, so
+    // we save them first).
+    const { stopAndClear, playCurrent } = await import('../services/player.service');
+    await stopAndClear(guildId);
+
+    // Reconnect voice
     const connection = await connectToChannel(member);
-    if (connection) {
-      getQueue(guildId).connection = { audioPlayer: null as any, connection, resource: null, startTime: 0, playingStartTime: 0 };
+    if (!connection) {
+      await interaction.editReply({ embeds: [new EmbedBuilder().setColor(0xED4245).setDescription('❌ Could not join your voice channel')] });
+      return;
     }
+    queue.connection = {
+      audioPlayer: null as any, connection, resource: null, startTime: 0, playingStartTime: 0,
+    };
+
+    // Restore queue: insert new track(s) immediately after the old current
+    // track, then advance to the first new one.
+    queue.items = savedItems;
+    queue.currentIndex = Math.max(0, savedIndex);
+    for (const t of tracksToPlay) {
+      queue.items.splice(queue.currentIndex + 1, 0, { track: t, requestedBy: interaction.user.id });
+      queue.currentIndex++;
+    }
+    queue.seekOffset = 0;
+    queue.isPlaying = true;
+    queue.isPaused = false;
+    await playCurrent(guildId, interaction.channel as any);
+
+    const count = tracksToPlay.length;
+    const desc = `✅ Now playing **${first.name}**${count > 1 ? ` (${count} tracks)` : ''}`;
+    await interaction.editReply({ embeds: [new EmbedBuilder().setColor(0x57F287).setDescription(desc)] });
+    queue.npChannelId = queue.npChannelId || interaction.channelId;
+    logger.debug('Play command completed');
+    return;
   }
 
   const qWasEmpty = getQueue(guildId).items.length === 0;
