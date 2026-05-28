@@ -1,4 +1,4 @@
-import { EmbedBuilder, ButtonBuilder, ButtonStyle, ActionRowBuilder, SelectMenuBuilder, SelectMenuOptionBuilder, ComponentType } from 'discord.js';
+import { EmbedBuilder, ButtonBuilder, ButtonStyle, ActionRowBuilder, StringSelectMenuBuilder, StringSelectMenuOptionBuilder, ComponentType } from 'discord.js';
 import { Track } from '../models/types';
 import { config } from '../config';
 import { embyClient } from '../client/emby.client';
@@ -77,8 +77,8 @@ export function getPlaybackButtons(
     new ButtonBuilder().setCustomId('fav').setEmoji(isFav ? '❤️' : '🤍').setLabel('Fav').setStyle(ButtonStyle.Secondary),
   );
 
-  const row3 = new ActionRowBuilder<SelectMenuBuilder>().addComponents(
-    new SelectMenuBuilder()
+  const row3 = new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(
+    new StringSelectMenuBuilder()
       .setCustomId('seekbar')
       .setPlaceholder('⏩ Seek to position')
       .addOptions(

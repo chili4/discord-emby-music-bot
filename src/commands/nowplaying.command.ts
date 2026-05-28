@@ -18,9 +18,10 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
   }
 
   const nextTrack = getNextTrack(guildId);
-  const position = queue.connection?.playingStartTime
-    ? Math.floor((Date.now() - queue.connection.playingStartTime) / 1000)
-    : 0;
+  let position = queue.seekOffset;
+  if (queue.connection?.playingStartTime && !queue.isPaused) {
+    position += Math.floor((Date.now() - queue.connection.playingStartTime) / 1000);
+  }
 
   const embed = nowPlayingEmbed(
     current.track,

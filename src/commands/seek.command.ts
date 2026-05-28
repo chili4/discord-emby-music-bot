@@ -23,6 +23,7 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
     return;
   }
 
+  queue.skipGuard = true;
   if (queue.connection?.audioPlayer) {
     queue.connection.audioPlayer.stop();
   }
@@ -30,7 +31,7 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
   queue.seekOffset = target;
 
   const { playCurrent } = await import('../services/player.service');
-  await playCurrent(guildId, interaction.channel as any);
+  await playCurrent(guildId);
 
   await interaction.editReply({ embeds: [new EmbedBuilder().setColor(0x57F287).setDescription(`⏩ Seeked to **${target}s**`)] });
 }

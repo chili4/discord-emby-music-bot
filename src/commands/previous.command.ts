@@ -18,10 +18,11 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
 
   const prev = previousTrack(guildId);
   if (prev) {
+    queue.skipGuard = true;
     if (queue.connection?.audioPlayer) {
       queue.connection.audioPlayer.stop();
     }
-    await playCurrent(guildId, interaction.channel as any);
+    await playCurrent(guildId);
     await interaction.editReply({ embeds: [new EmbedBuilder().setColor(0x57F287).setDescription('⏮️ Playing previous track')] });
   } else {
     await interaction.editReply({ embeds: [new EmbedBuilder().setColor(0xED4245).setDescription('❌ No previous track')] });

@@ -22,11 +22,15 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
   if (!removed) return;
 
   if (position === queue.currentIndex && queue.isPlaying) {
+    queue.skipGuard = true;
+    if (queue.connection?.audioPlayer) {
+      queue.connection.audioPlayer.stop();
+    }
     const { skipTrack } = await import('../services/queue.service');
     const next = skipTrack(guildId);
     if (next) {
       queue.seekOffset = 0;
-      await playCurrent(guildId, interaction.channel as any);
+      await playCurrent(guildId);
     } else {
       queue.isPlaying = false;
     }

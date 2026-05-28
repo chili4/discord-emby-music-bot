@@ -256,6 +256,14 @@ function getAudioPlayer(guildId: string): AudioPlayer {
       if (q.processingEnd) return;
       q.processingEnd = true;
 
+      // Stale event guard: if playerGeneration changed while this Idle event
+      // was queued (e.g. a new playCurrent started), the event is from a
+      // previous track and should be ignored.
+      if (q.playerGeneration !== expectedGen) {
+        q.processingEnd = false;
+        return;
+      }
+
       // Guard: user pressed skip/prev button (handles skipTrack itself).
       // The button handler's playCurrent will re-start after oldFf.kill await completes.
       if (q.skipGuard) {

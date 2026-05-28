@@ -50,21 +50,21 @@ discordClient.on(Events.InteractionCreate, async (interaction) => {
       await r({ embeds: [simpleEmbed('An error occurred.', 0xED4245)], ephemeral: true }).catch(() => {});
     }
   } else if (interaction.isAutocomplete()) {
-    console.log(`[AUTOCOMPLETE] cmd=${interaction.commandName} user=${interaction.user.tag}`);
+    logger.debug(`[AUTOCOMPLETE] cmd=${interaction.commandName} user=${interaction.user.tag}`);
     const cmd = commands.get(interaction.commandName);
     if (cmd?.autocomplete) {
       try {
         await cmd.autocomplete(interaction);
-        console.log(`[AUTOCOMPLETE] OK`);
+        logger.debug(`[AUTOCOMPLETE] OK`);
       } catch (e: any) {
-        console.error(`[AUTOCOMPLETE] Error: ${e.message}`);
+        logger.error(`[AUTOCOMPLETE] Error: ${e.message}`);
         await interaction.respond([]).catch(() => {});
       }
     } else {
-      console.warn(`[AUTOCOMPLETE] No handler for ${interaction.commandName}`);
+      logger.warn(`[AUTOCOMPLETE] No handler for ${interaction.commandName}`);
     }
-  } else if (interaction.isSelectMenu()) {
-    await handleSelectMenu(interaction as any);
+  } else if (interaction.isStringSelectMenu()) {
+    await handleSelectMenu(interaction);
   } else if (interaction.isButton()) {
     await handleButton(interaction);
   }
@@ -179,7 +179,7 @@ async function handleButton(interaction: ButtonInteraction) {
   await interaction.editReply({}).catch(() => {});
 }
 
-async function handleSelectMenu(interaction: any) {
+async function handleSelectMenu(interaction: import('discord.js').StringSelectMenuInteraction) {
   await interaction.deferUpdate();
   const g = interaction.guildId!;
   const q = getQueue(g);

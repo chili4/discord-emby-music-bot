@@ -6,8 +6,9 @@ export const data = new SlashCommandBuilder()
   .setDescription('Disconnect from the voice channel');
 
 export async function execute(interaction: ChatInputCommandInteraction): Promise<void> {
+  await interaction.deferReply();
   const guildId = interaction.guildId!;
-  disconnect(guildId);
+  await disconnect(guildId);
 
-  await interaction.reply({ embeds: [new EmbedBuilder().setColor(0xED4245).setDescription('👋 Disconnected')] });
+  await interaction.editReply({ embeds: [new EmbedBuilder().setColor(0xED4245).setDescription('👋 Disconnected')] });
 }

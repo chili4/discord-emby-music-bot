@@ -19,6 +19,7 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
   if (queue.isPaused) {
     player.unpause();
     queue.isPaused = false;
+    if (queue.connection) queue.connection.playingStartTime = Date.now();
     await interaction.reply({ embeds: [new EmbedBuilder().setColor(0x57F287).setDescription('▶️ Resumed')] });
   } else {
     player.pause();
