@@ -112,11 +112,16 @@ export async function playCurrent(guildId: string, channel?: TextChannel) {
       'pipe:1',
     );
 
+    // Kill old FFmpeg and immediately remove from map so its exit handler
+    // can't mutate shared state (the guard below checks map ownership).
+    // Do NOT await exit — spawn the new FFmpeg and play immediately so the
+    // AudioPlayer is already on the new resource when the old one's Idle
+    // event fires (prevents zombie Idle from overriding the new track).
     const oldFf = ffmpegProcesses.get(guildId);
     if (oldFf) {
+      ffmpegProcesses.delete(guildId);
       if (oldFf.exitCode === null && oldFf.signalCode === null) {
         oldFf.kill();
-        await new Promise<void>(resolve => oldFf.once('exit', () => resolve()));
       }
     }
 
@@ -160,7 +165,14 @@ export async function playCurrent(guildId: string, channel?: TextChannel) {
       }, 3_000);
     });
 
+    // Play BEFORE awaiting old FFmpeg — the player switches to the new
+    // resource now, so any Idle from the OLD resource is ignored.
     player.play(res);
+
+    // Now await old FFmpeg exit (background cleanup — no longer blocks)
+    if (oldFf && oldFf.exitCode === null && oldFf.signalCode === null) {
+      await new Promise<void>(resolve => oldFf.once('exit', () => resolve()));
+    }
 
     if (channel) {
       await sendNP(channel, guildId);
@@ -171,6 +183,11 @@ export async function playCurrent(guildId: string, channel?: TextChannel) {
 
     ff.on('error', (e) => logger.error(`FF: ${e.message}`));
     ff.on('exit', (code) => {
+      // Guard: only modify shared state if this process is still the
+      // current one. Old exit handlers from killed processes are ignored.
+      if (ffmpegProcesses.get(guildId) !== ff) return;
+      ffmpegProcesses.delete(guildId);
+
       q.lastFfExitCode = code;
       if (code !== 0 && code !== null) {
         if (q.skipGuard) {
@@ -190,9 +207,6 @@ export async function playCurrent(guildId: string, channel?: TextChannel) {
             stopAndClear(guildId);
           }
         }
-      }
-      if (ffmpegProcesses.get(guildId) === ff) {
-        ffmpegProcesses.delete(guildId);
       }
     });
   } finally {
