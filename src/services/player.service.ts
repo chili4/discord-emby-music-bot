@@ -13,7 +13,7 @@ import { spawn, ChildProcess } from 'child_process';
 import { GuildMember, TextChannel } from 'discord.js';
 import { embyClient } from '../client/emby.client';
 import { logger } from '../utils/logger';
-import { getQueue, getCurrentTrack, skipTrack } from './queue.service';
+import { getQueue, getCurrentTrack, skipTrack, removeQueue } from './queue.service';
 import { startScrobble, stopScrobble } from './scrobble.service';
 import {
   sendNP, disableNP, clearNP,
@@ -72,7 +72,6 @@ export async function playCurrent(guildId: string, channel?: TextChannel) {
     return;
   }
 
-  // Clear reentry guard in case it was left set (e.g., initial play, no old FFmpeg)
   q.processingEnd = false;
 
   const url = embyClient.getStreamUrl(cur.track.id, q.seekOffset);
@@ -87,7 +86,6 @@ export async function playCurrent(guildId: string, channel?: TextChannel) {
     args.push('-ss', String(q.seekOffset));
   }
   args.push(
-    '-re',
     '-i', url,
     '-loglevel', 'warning',
     '-af', `volume=${vol}/100`,
@@ -128,7 +126,6 @@ export async function playCurrent(guildId: string, channel?: TextChannel) {
   const player = getAudioPlayer(guildId);
   q.connection.audioPlayer = player;
   q.connection.resource = res;
-  q.connection.startTime = Date.now();
   q.isPlaying = true;
   q.isPaused = false;
 
@@ -142,11 +139,26 @@ export async function playCurrent(guildId: string, channel?: TextChannel) {
   q.processingEnd = false;
   q.playerGeneration++;
 
+  // Cancel any pending Playing event from a previous track to prevent
+  // stale sendNP from the old player after the new track has started.
+  player.removeAllListeners('playing');
+
   player.play(res);
 
-  embyClient.reportPlaybackStart(cur.track.id, cur.track.id);
-  startScrobble(guildId);
-  startNpTimer(guildId);
+  // Remove -re: let FFmpeg read as fast as possible, no artificial slowdown.
+  // startTime and timers are set when audio actually starts playing (Playing state).
+
+  let timersStarted = false;
+  player.on(AudioPlayerStatus.Playing, () => {
+    if (timersStarted) return;
+    timersStarted = true;
+    q.connection!.startTime = Date.now();
+    q.connection!.playingStartTime = Date.now();
+    setTimeout(() => {
+      startScrobble(guildId);
+      startNpTimer(guildId);
+    }, 3_000);
+  });
 
   // Reset FFmpeg error tracking on new track
   q.ffmpegErrorCount = 0;
@@ -362,6 +374,22 @@ export async function disconnect(guildId: string) {
   if (q.connection?.connection) q.connection.connection.destroy();
   const p = players.get(guildId);
   if (p) { p.stop(true); players.delete(guildId); }
-  q.npMessageId = null;
-  q.npChannelId = null;
+  removeQueue(guildId);
+}
+
+export async function reconnectVoiceChannel(member: GuildMember): Promise<VoiceConnection | null> {
+  const ch = member.voice.channel;
+  if (!ch) return null;
+
+  const existing = getQueue(member.guild.id).connection?.connection;
+  if (existing && existing.state.status !== VoiceConnectionStatus.Destroyed) {
+    try {
+      await entersState(existing, VoiceConnectionStatus.Ready, 5_000);
+      return existing;
+    } catch {
+      existing.destroy();
+    }
+  }
+
+  return connectToChannel(member);
 }

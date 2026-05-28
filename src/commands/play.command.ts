@@ -1,6 +1,6 @@
 import { ChatInputCommandInteraction, AutocompleteInteraction, SlashCommandBuilder, EmbedBuilder } from 'discord.js';
 import { searchAndResolve, searchAutocomplete } from '../services/search.service';
-import { playTracks, connectToChannel } from '../services/player.service';
+import { playTracks, connectToChannel, reconnectVoiceChannel } from '../services/player.service';
 import { addTrackNext, getQueue } from '../services/queue.service';
 import { logger } from '../utils/logger';
 import { embyClient } from '../client/emby.client';
@@ -45,7 +45,14 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
       await interaction.editReply({ embeds: [new EmbedBuilder().setColor(0xED4245).setDescription('❌ Could not join your voice channel')] });
       return;
     }
-    queue.connection = { audioPlayer: null as any, connection, resource: null, startTime: 0 };
+    queue.connection = { audioPlayer: null as any, connection, resource: null, startTime: 0, playingStartTime: 0 };
+  } else {
+    const connection = await reconnectVoiceChannel(member);
+    if (!connection) {
+      await interaction.editReply({ embeds: [new EmbedBuilder().setColor(0xED4245).setDescription('❌ Could not reconnect to your voice channel')] });
+      return;
+    }
+    queue.connection.connection = connection;
   }
 
   // Parse "ID||Name" format from autocomplete
@@ -107,7 +114,7 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
     // Re-connect after clearing
     const connection = await connectToChannel(member);
     if (connection) {
-      getQueue(guildId).connection = { audioPlayer: null as any, connection, resource: null, startTime: 0 };
+      getQueue(guildId).connection = { audioPlayer: null as any, connection, resource: null, startTime: 0, playingStartTime: 0 };
     }
   }
 

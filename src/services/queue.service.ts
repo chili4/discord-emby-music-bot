@@ -64,6 +64,17 @@ export function getCurrentTrack(guildId: string): QueueItem | null {
   return queue.items[queue.currentIndex];
 }
 
+export function getNextTrack(guildId: string): QueueItem | null {
+  const queue = getQueue(guildId);
+  if (queue.items.length === 0) return null;
+  let nextIdx = queue.currentIndex + 1;
+  if (nextIdx >= queue.items.length) {
+    if (queue.loopMode === 'all') nextIdx = 0;
+    else return null;
+  }
+  return queue.items[nextIdx] || null;
+}
+
 export function skipTrack(guildId: string): QueueItem | null {
   const queue = getQueue(guildId);
   if (queue.items.length === 0) return null;

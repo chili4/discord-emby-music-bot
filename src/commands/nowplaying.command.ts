@@ -1,5 +1,5 @@
 import { ChatInputCommandInteraction, SlashCommandBuilder } from 'discord.js';
-import { getQueue, getCurrentTrack } from '../services/queue.service';
+import { getQueue, getCurrentTrack, getNextTrack } from '../services/queue.service';
 import { nowPlayingEmbed } from '../utils/embed';
 
 export const data = new SlashCommandBuilder()
@@ -13,12 +13,13 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
 
   if (!current) {
     const emptyTrack = { id: '', name: 'Nothing playing', artist: '', album: '', albumId: '', duration: 0, imageTag: null, type: 'audio' as const };
-    await interaction.reply({ embeds: [nowPlayingEmbed(emptyTrack, 0, queue.volume)], ephemeral: true });
+    await interaction.reply({ embeds: [nowPlayingEmbed(emptyTrack, 0, queue.volume, undefined, null)], ephemeral: true });
     return;
   }
 
-  const position = queue.connection?.startTime
-    ? Math.floor((Date.now() - queue.connection.startTime) / 1000)
+  const nextTrack = getNextTrack(guildId);
+  const position = queue.connection?.playingStartTime
+    ? Math.floor((Date.now() - queue.connection.playingStartTime) / 1000)
     : 0;
 
   const embed = nowPlayingEmbed(
@@ -26,6 +27,7 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
     Math.min(position, current.track.duration),
     queue.volume,
     current.requestedBy,
+    nextTrack?.track ?? null,
   );
 
   await interaction.reply({ embeds: [embed] });

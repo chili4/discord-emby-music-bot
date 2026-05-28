@@ -29,6 +29,7 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
     connection,
     resource: null,
     startTime: 0,
+    playingStartTime: 0,
   };
 
   await interaction.editReply({ embeds: [new EmbedBuilder().setColor(0x57F287).setDescription(`✅ Joined **${member.voice.channel.name}**`)] });

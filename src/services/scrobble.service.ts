@@ -16,8 +16,8 @@ export function startScrobble(guildId: string): void {
 
       if (conn.resource?.playbackDuration === undefined) return;
 
-      const positionSec = conn.audioPlayer.state.status === 'playing'
-        ? (Date.now() - conn.startTime) / 1000
+      const positionSec = conn.audioPlayer.state.status === 'playing' && conn.playingStartTime
+        ? (Date.now() - conn.playingStartTime) / 1000
         : 0;
 
       const positionTicks = Math.floor(positionSec * 10_000_000);

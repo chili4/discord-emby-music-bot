@@ -26,7 +26,7 @@ function bar(current: number, total: number, len = 14): string {
   return '▰'.repeat(f) + '▱'.repeat(len - f);
 }
 
-export function nowPlayingEmbed(track: Track, position: number, volume: number, requestedBy?: string) {
+export function nowPlayingEmbed(track: Track, position: number, volume: number, requestedBy?: string, nextTrack?: Track | null) {
   const pos = Math.min(Math.max(position, 0), track.duration);
   const progress = bar(pos, track.duration);
   const dur = track.duration > 0 ? `${fmt(pos)} / ${fmt(track.duration)}` : '0:00 / 0:00';
@@ -38,6 +38,10 @@ export function nowPlayingEmbed(track: Track, position: number, volume: number, 
     .addFields(
       { name: progress, value: `\`${dur}\``, inline: false },
     );
+
+  if (nextTrack) {
+    e.addFields({ name: '▶️ Up next', value: `${nextTrack.name} — ${nextTrack.artist}`, inline: false });
+  }
 
   if (requestedBy) {
     e.setFooter({ text: `Pedido por @${requestedBy}` });
@@ -78,7 +82,7 @@ export function getPlaybackButtons(
       .setCustomId('seekbar')
       .setPlaceholder('⏩ Seek to position')
       .addOptions(
-        [0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100].map(p => ({
+        Array.from({ length: 21 }, (_, i) => i * 5).map(p => ({
           label: `${p}%`,
           value: String(p),
         })),

@@ -5,16 +5,20 @@ Discord music bot that plays audio directly from your [Emby](https://emby.media)
 ## Features
 
 - **22 slash commands** — play, pause, resume, skip, previous, stop, clear, queue, remove, jump, shuffle, volume, seek, summon, disconnect, nowplaying, search, random, lyrics, fav, playlist, status, help
-- **Autocomplete** — search your Emby library by song, album, artist, or playlist name
-- **Interactive buttons** — Prev, Pause/Resume, Stop, Next, -30s, Loop (Off/All/One), +30s, Fav
+- **Autocomplete** — search your Emby library by song, album, artist, or playlist name (with 350ms debounce)
+- **Interactive buttons** — Prev, Pause/Resume, Stop, Next, -30s, Loop (Off/All/One), +30s, Fav, seekbar (0–100% in 5% steps)
+- **Queue pagination** — ◀ ▶ buttons to browse the queue by pages
 - **Loop modes** — no loop, loop all, loop one
-- **Seek** — rewind/forward via buttons or `/seek` command (uses FFmpeg `-ss` + HTTP Range requests)
-- **Favorites** — mark/unmark tracks as favorites with the ❤️ button, browse favorites as a "playlist"
+- **Seek** — rewind/forward via buttons, `/seek` command, or interactive seekbar (uses FFmpeg `-ss` + HTTP Range)
+- **Favorites** — mark/unmark tracks with the ❤️ button, browse favorites via `playlist play favorites`
 - **Playlist management** — create, add, remove, view, delete, and play Emby playlists with sort options (normal, random, A-Z, newest)
+- **Next track preview** — NP embed shows "▶️ Up next" with the next track name
 - **Volume control** — 0–150 scale with logarithmic mapping
 - **Scrobbling** — playback progress reported to Emby every 5 seconds
-- **Now Playing display** — track info, progress bar, album art, next-track auto-advance
-- **Collision-safe** — guards against zombie FFmpeg processes, double-skip events, reentrant idle handlers, and network pipe failures
+- **Now Playing display** — track info, progress bar, album art, real-time position counter (1s update)
+- **Lyrics** — fetches from lrclib.net with fallback to lyrics.ovh
+- **Session refresh** — Emby token auto-refreshes every 4 hours
+- **Collision-safe** — `playerGeneration` guard prevents zombie listeners, `skipGuard`/`processingEnd` flags prevent double-skip, old FFmpeg synchronization via kill+await
 
 ## Requirements
 
@@ -118,29 +122,29 @@ npm run dev
 | `/previous` | Go back to previous track |
 | `/stop` | Stop playback and clear the queue |
 | `/clear` | Clear the queue without stopping |
-| `/queue [page]` | Show the current queue |
-| `/remove <position>` | Remove a track from the queue by position |
+| `/queue [page]` | Show the current queue (paginated with ◀ ▶ buttons) |
+| `/remove <position>` | Remove a track from the queue (skips to next if removing current) |
 | `/jump <position>` | Jump to a specific track in the queue |
-| `/shuffle` | Randomize the remaining queue |
+| `/shuffle` | Randomize the remaining queue (preserves current track) |
 | `/volume <0-150>` | Set playback volume |
 | `/seek <seconds>` | Seek to a specific position in the current track |
 | `/summon` | Make the bot join your voice channel |
-| `/disconnect` | Disconnect the bot from voice |
+| `/disconnect` | Disconnect the bot from voice and clean up memory |
 | `/nowplaying` | Show the currently playing track |
 | `/search <query>` | Search the Emby library |
 | `/random [count]` | Play random tracks |
 | `/lyrics` | Show lyrics for the current track |
-| `/fav <add\|remove\|list\|play>` | Manage your favorite tracks |
+| `/fav` | Toggle favorite on current track |
 | `/playlist <create\|add\|remove\|list\|view\|play\|delete>` | Full playlist management |
 | `/status` | Show bot status |
 | `/help` | Show command reference |
 
 ### Play Options
 
-- **`name` autocomplete** — start typing a song, album, or artist name; results include type tags (🎵 Audio, 💿 Album, 🎤 Artist, 📋 Playlist)
+- **`name` autocomplete** — start typing a song, album, or artist name; 350ms debounce prevents request storms
 - **`type` filter** — restrict search to Audio, AudioAlbum, Playlist, or Artist
 - **`next: true`** — add the track to play immediately after the current one
-- **`now: true`** — stop the current track and play this one right now
+- **`now: true`** — replace upcoming tracks and play this one right now (keeps current track)
 
 ### Playlist Subcommands
 
@@ -158,7 +162,7 @@ The `play` subcommand accepts a `sort` option: `normal` (default), `random` (Fis
 
 ### Interactive Buttons
 
-Every Now Playing message shows two rows of buttons:
+Every Now Playing message shows three rows of controls:
 
 | Button | Action |
 |---|---|
@@ -170,6 +174,7 @@ Every Now Playing message shows two rows of buttons:
 | ➡️ / 🔁 / 🔂 Loop | Toggle loop: Off → All → One |
 | ⏩ +30s | Forward 30 seconds |
 | ❤️ / 🤍 Fav | Toggle favorite status |
+| Seekbar (0–100%) | Jump to any position in the track (5% steps) |
 
 ## Technical Architecture
 
@@ -186,18 +191,20 @@ Emby API (audio streaming + metadata)
 ### Audio Pipeline
 
 1. User runs `/play` → bot searches Emby via REST API
-2. Bot spawns FFmpeg with: `-user_agent VLC/3.0.20 -headers X-Emby-Token:... -ss <seek> -re -i <url> -acodec libopus -f opus pipe:1`
-3. FFmpeg streams the audio file over HTTP (Emby's `/Audio/{id}/stream?Static=true` endpoint) and transcodes to OPUS
-4. `@discordjs/voice` creates an `AudioResource` from FFmpeg's stdout and pipes it through `OggDemuxer` + Opus encoder
+2. Bot spawns FFmpeg: `-user_agent VLC/3.0.20 -headers X-Emby-Token:... -ss <seek> -i <url> -acodec libopus -f opus pipe:1`
+3. FFmpeg streams the audio file over HTTP (Emby's `/Audio/{id}/stream?Static=true`) and transcodes to OPUS
+4. `@discordjs/voice` creates an `AudioResource` from FFmpeg's stdout pipe
 5. The `AudioPlayer` sends Opus packets to Discord's voice gateway via UDP
 
 ### Key Design Decisions
 
-- **Static streaming** (`Static=true`) — Emby serves the raw file without remuxing; seeking is handled via FFmpeg's `-ss` which uses Emby's HTTP Range support
-- **`-re` flag** — slows FFmpeg to real-time speed, preventing pipe buffer overflows and audio speed issues after seeks
-- **Old FFmpeg synchronization** — before spawning a new FFmpeg process, the old one is killed and awaited. This ensures the old resource's internal `end` listener fires while the `AudioPlayer` is Idle, preventing it from interrupting the new playback
-- **Skip guard / processing guard** — two flags (`skipGuard`, `processingEnd`) prevent the `AudioPlayerStatus.Idle` handler from double-processing or reacting to stale events from killed processes
-- **Optimistic favorites** — the toggle button uses local state to determine add/remove, avoiding Emby's eventual consistency delays
+- **Static streaming** (`Static=true`) — Emby serves the raw file without remuxing; seeking uses FFmpeg's `-ss` with Emby's HTTP Range support
+- **No `-re` flag** — FFmpeg reads as fast as possible. Timers start only when `AudioPlayerStatus.Playing` fires (after ~3s buffer fill), preventing premature position tracking and distortion
+- **Dual time tracking** — `startTime` = when `playCurrent` is called (for pause offset calculation), `playingStartTime` = when audio actually starts playing
+- **Old FFmpeg synchronization** — before spawning a new FFmpeg, the old one is killed and awaited. This ensures the old resource's internal `end` listener fires while the player is Idle, not while Playing
+- **`playerGeneration` guard** — each `playCurrent` increments `playerGeneration`. Idle handler discards events where `q.playerGeneration === 0` or `expectedGen !== currentGen`, preventing zombie listeners from previous players
+- **`skipGuard` / `processingEnd` flags** — prevent double-processing from button clicks and reentrant Idle events
+- **Autocomplete debounce** — 350ms timer clears on each keystroke; only the last keystroke within the window triggers an Emby API call
 
 ## Project Structure
 
@@ -205,31 +212,30 @@ Emby API (audio streaming + metadata)
 ├── src/
 │   ├── client/
 │   │   ├── discord.client.ts    # Discord.js client singleton
-│   │   └── emby.client.ts       # Emby REST API client (auth, search, streaming, favorites, playlists)
+│   │   └── emby.client.ts       # Emby REST API client + auto-refresh timer
 │   ├── commands/
-│   │   ├── index.ts             # Command registry
-│   │   ├── play.command.ts      # /play — search + playback
-│   │   ├── playlist.command.ts  # /playlist — favorites + playlist CRUD + play with sort
-│   │   ├── skip.command.ts      # /skip — skip with guard
+│   │   ├── index.ts             # Command registry + button/select-menu handlers
+│   │   ├── play.command.ts      # /play — search + playback + reconnect
+│   │   ├── playlist.command.ts  # /playlist — full playlist CRUD
 │   │   └── ...                  # All other commands
 │   ├── config.ts                # Environment variable validation (zod)
-│   ├── index.ts                 # Entry point — login, command registration, button handler
+│   ├── index.ts                 # Entry point — login, command registration
 │   ├── models/
-│   │   └── types.ts             # TypeScript interfaces (Track, QueueState, EmbyItem, etc.)
+│   │   └── types.ts             # TypeScript interfaces
 │   ├── services/
-│   │   ├── player.service.ts    # FFmpeg spawn, AudioPlayer management, voice connection
+│   │   ├── player.service.ts    # FFmpeg spawn, AudioPlayer, voice connection
 │   │   ├── queue.service.ts     # Queue state, skip/prev/jump/shuffle
-│   │   ├── nowplaying.service.ts # NP message send/update/disable/clear
-│   │   ├── search.service.ts    # Emby search + result resolution
+│   │   ├── nowplaying.service.ts # NP message send/update/disable (1s timer)
+│   │   ├── search.service.ts    # Emby search + debounced autocomplete
 │   │   ├── scrobble.service.ts  # Playback progress reporting
-│   │   └── lyrics.service.ts    # Lyrics fetching
+│   │   └── lyrics.service.ts    # Lyrics (lrclib.net → lyrics.ovh fallback)
 │   └── utils/
-│       ├── embed.ts             # Discord embed builders + button rows
-│       ├── logger.ts            # Structured logger (pino)
+│       ├── embed.ts             # Discord embed builders + button rows + seekbar
+│       ├── logger.ts            # Structured logger
 │       └── time.ts              # tick-to-seconds conversion
-├── .env.example                 # Environment variable template
-├── docker-compose.yml           # Docker compose (network_mode: host)
-├── Dockerfile                   # Node 22 Alpine + FFmpeg
+├── .env.example
+├── docker-compose.yml
+├── Dockerfile
 ├── tsconfig.json
 └── package.json
 ```
@@ -238,21 +244,25 @@ Emby API (audio streaming + metadata)
 
 ### FFmpeg exit code 255
 
-**Expected behavior during skips:** when skipping tracks, the old FFmpeg is killed intentionally. Exit code 255 is logged at `debug` level and not counted as an error.
+**Expected behavior during skips:** when skipping, the old FFmpeg is killed intentionally. Exit code 255 is logged at `debug` level and not counted as an error.
 
-**During natural playback:** the `-re` flag keeps FFmpeg in sync with real time. If the audio stream ends naturally, FFmpeg exits with 255 because the pipe closes after all data is consumed. The Idle handler advances to the next track or ends the queue normally.
+**During natural playback:** FFmpeg exits 255 when the pipe closes after all data is consumed. The Idle handler advances to the next track or ends the queue normally.
 
 ### Commands not appearing
 
-Global command registration can take up to an hour to propagate. For faster development, set `GUILD_ID` in `.env` — guild commands update instantly.
+Global command registration can take up to an hour to propagate. Set `GUILD_ID` in `.env` for instant guild-only command updates.
 
 ### Discord cannot see album art
 
-Set `EMBY_PUBLIC_URL` to a public HTTPS domain that points to your Emby server. Discord blocks HTTP images. The bot embeds the full URL with the API token as a query parameter.
+Set `EMBY_PUBLIC_URL` to a public HTTPS domain pointing to your Emby server. Discord blocks HTTP images. The bot embeds the URL with the API token as a query parameter.
 
 ### Voice connection drops
 
-The bot uses `network_mode: host` in Docker to avoid Discord voice UDP issues. If running outside Docker, ensure UDP ports are not blocked by a firewall.
+The bot uses `network_mode: host` in Docker to avoid Discord voice UDP issues. If running outside Docker, ensure UDP ports are not blocked.
+
+### Timer starts before audio plays
+
+Timers now start only when `AudioPlayerStatus.Playing` fires (after ~3 seconds), ensuring the position counter and scrobble are accurate from the moment audio begins.
 
 ## License
 

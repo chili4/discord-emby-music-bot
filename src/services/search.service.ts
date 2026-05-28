@@ -2,6 +2,8 @@ import { embyClient } from '../client/emby.client';
 import { EmbySearchHint, Track } from '../models/types';
 import { logger } from '../utils/logger';
 
+const autocompleteTimers = new Map<string, NodeJS.Timeout>();
+
 export interface SearchResult {
   tracks: Track[];
   type: 'single' | 'album' | 'artist' | 'playlist' | 'list';
@@ -47,23 +49,33 @@ function formatAutocompleteHint(hint: EmbySearchHint): { name: string; value: st
   if (artist) label += ` — ${artist}`;
   if (album) label += ` · ${album}`;
   if (label.length > 95) label = label.slice(0, 92) + '...';
-  // Send ID||Name as value so play command can look up by ID
   return { name: label, value: `${hint.ItemId || hint.Id}||${hint.Name.slice(0, 80)}` };
 }
 
-export async function searchAutocomplete(query: string, type?: number): Promise<{ name: string; value: string }[]> {
-  if (!query || query.length < 2) {
-    logger.debug(`autocomplete: query "${query}" too short`);
-    return [];
-  }
+export function searchAutocomplete(
+  query: string,
+  type?: number,
+): Promise<{ name: string; value: string }[]> {
+  return new Promise(resolve => {
+    const key = `${query}||${type ?? ''}`;
+    const existing = autocompleteTimers.get(key);
+    if (existing) clearTimeout(existing);
 
-  const targetType = resolveType(type);
-  const hints = await embyClient.search(query, 10);
-  logger.debug(`autocomplete: "${query}" → ${hints.length} hints`);
-  const filtered = targetType ? hints.filter(h => h.Type === targetType) : hints;
-  logger.debug(`autocomplete: filtered → ${filtered.length}`);
+    const timer = setTimeout(async () => {
+      autocompleteTimers.delete(key);
+      if (!query || query.length < 2) {
+        resolve([]);
+        return;
+      }
 
-  return filtered.slice(0, 10).map(formatAutocompleteHint);
+      const targetType = resolveType(type);
+      const hints = await embyClient.search(query, 10);
+      const filtered = targetType ? hints.filter(h => h.Type === targetType) : hints;
+      resolve(filtered.slice(0, 10).map(formatAutocompleteHint));
+    }, 350);
+
+    autocompleteTimers.set(key, timer);
+  });
 }
 
 function resolveType(type?: number): string | null {

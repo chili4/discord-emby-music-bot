@@ -1,4 +1,4 @@
-import { Events, REST, Routes, ButtonInteraction } from 'discord.js';
+import { Events, REST, Routes, ButtonInteraction, ActionRowBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
 import { discordClient } from './client/discord.client';
 import { embyClient } from './client/emby.client';
 import { config } from './config';
@@ -9,7 +9,7 @@ import {
 } from './services/queue.service';
 import { playCurrent, stopAndClear } from './services/player.service';
 import { updateNP } from './services/nowplaying.service';
-import { simpleEmbed } from './utils/embed';
+import { simpleEmbed, queueEmbed } from './utils/embed';
 
 process.on('unhandledRejection', (e) => logger.error('Unhandled rejection:', e));
 
@@ -77,8 +77,8 @@ async function handleButton(interaction: ButtonInteraction) {
 
   switch (interaction.customId) {
     case 'pause': {
-      if (q.connection?.startTime) {
-        q.seekOffset += Math.floor((Date.now() - q.connection.startTime) / 1000);
+      if (q.connection?.playingStartTime) {
+        q.seekOffset += Math.floor((Date.now() - q.connection.playingStartTime) / 1000);
       }
       q.connection?.audioPlayer?.pause();
       q.isPaused = true;
@@ -87,7 +87,7 @@ async function handleButton(interaction: ButtonInteraction) {
     case 'resume': {
       q.connection?.audioPlayer?.unpause();
       q.isPaused = false;
-      q.connection!.startTime = Date.now();
+      q.connection!.playingStartTime = Date.now();
       break;
     }
     case 'next': {
@@ -104,30 +104,30 @@ async function handleButton(interaction: ButtonInteraction) {
       break;
     }
     case 'rewind': {
-      if (q.connection?.startTime) {
-        q.seekOffset += Math.floor((Date.now() - q.connection.startTime) / 1000);
+      if (q.connection?.playingStartTime) {
+        q.seekOffset += Math.floor((Date.now() - q.connection.playingStartTime) / 1000);
       }
       q.seekOffset = Math.max(0, q.seekOffset - 30);
       q.skipGuard = true;
       if (q.isPaused) {
-        q.connection!.startTime = Date.now();
+        q.connection!.playingStartTime = Date.now();
       } else {
-        q.connection!.startTime = Date.now();
+        q.connection!.playingStartTime = Date.now();
         await playCurrent(g, interaction.channel as any);
       }
       break;
     }
     case 'forward': {
       const cur = getCurrentTrack(g);
-      if (q.connection?.startTime) {
-        q.seekOffset += Math.floor((Date.now() - q.connection.startTime) / 1000);
+      if (q.connection?.playingStartTime) {
+        q.seekOffset += Math.floor((Date.now() - q.connection.playingStartTime) / 1000);
       }
       q.seekOffset = Math.min((cur?.track.duration || 0) - 1, q.seekOffset + 30);
       q.skipGuard = true;
       if (q.isPaused) {
-        q.connection!.startTime = Date.now();
+        q.connection!.playingStartTime = Date.now();
       } else {
-        q.connection!.startTime = Date.now();
+        q.connection!.playingStartTime = Date.now();
         await playCurrent(g, interaction.channel as any);
       }
       break;
@@ -154,6 +154,25 @@ async function handleButton(interaction: ButtonInteraction) {
       q.loopMode = modes[(modes.indexOf(q.loopMode) + 1) % 3];
       break;
     }
+    default: {
+      if (interaction.customId.startsWith('queue_goto_')) {
+        const targetPage = parseInt(interaction.customId.replace('queue_goto_', ''), 10);
+        const totalPages = Math.ceil(q.items.length / 10);
+        const safePage = Math.max(0, Math.min(targetPage, totalPages - 1));
+        const embed = queueEmbed(
+          q.items.map(i => i.track),
+          q.currentIndex,
+          safePage,
+          totalPages,
+        );
+        const rows = totalPages > 1 ? [new ActionRowBuilder<ButtonBuilder>().addComponents(
+          new ButtonBuilder().setCustomId(`queue_goto_${safePage - 1}`).setEmoji('◀').setStyle(ButtonStyle.Secondary).setDisabled(safePage === 0),
+          new ButtonBuilder().setCustomId(`queue_goto_${safePage + 1}`).setEmoji('▶').setStyle(ButtonStyle.Secondary).setDisabled(safePage >= totalPages - 1),
+        )] : [];
+        await interaction.editReply({ embeds: [embed], components: rows }).catch(() => {});
+        return;
+      }
+    }
   }
 
   await updateNP(g);
@@ -173,9 +192,9 @@ async function handleSelectMenu(interaction: any) {
       q.seekOffset = target;
       q.skipGuard = true;
       if (q.isPaused) {
-        q.connection!.startTime = Date.now();
+        q.connection!.playingStartTime = Date.now();
       } else {
-        q.connection!.startTime = Date.now();
+        q.connection!.playingStartTime = Date.now();
         await playCurrent(g, interaction.channel as any);
       }
     }

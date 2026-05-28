@@ -1,6 +1,6 @@
 import { TextChannel, Message, ActionRowBuilder, ButtonBuilder, ComponentType, ActionRow } from 'discord.js';
 import { logger } from '../utils/logger';
-import { getQueue, getCurrentTrack } from './queue.service';
+import { getQueue, getCurrentTrack, getNextTrack } from './queue.service';
 import { nowPlayingEmbed, getPlaybackButtons } from '../utils/embed';
 import { embyClient } from '../client/emby.client';
 
@@ -26,8 +26,9 @@ async function resolveMessage(guildId: string): Promise<Message | null> {
 function calcPosition(guildId: string): number {
   const q = getQueue(guildId);
   let pos = q.seekOffset;
-  if (q.connection?.startTime && !q.isPaused) {
-    pos += Math.floor((Date.now() - q.connection.startTime) / 1000);
+  // playingStartTime tracks from when audio started playing (after FFmpeg buffer fill)
+  if (q.connection?.playingStartTime && !q.isPaused) {
+    pos += Math.floor((Date.now() - q.connection.playingStartTime) / 1000);
   }
   const cur = getCurrentTrack(guildId);
   return Math.min(pos, cur?.track.duration || 0);
@@ -47,7 +48,8 @@ export async function sendNP(channel: TextChannel, guildId: string): Promise<Mes
     }
   }
   logger.debug(`sendNP: ${cur.track.name} fav=${isFav}`);
-  const embed = nowPlayingEmbed(cur.track, calcPosition(guildId), q.volume, cur.requestedBy);
+  const nextTrack = getNextTrack(guildId);
+  const embed = nowPlayingEmbed(cur.track, calcPosition(guildId), q.volume, cur.requestedBy, nextTrack?.track ?? null);
   const rows = getPlaybackButtons(q.isPaused, q.loopMode, isFav);
 
   // Disable old NP message (remove buttons) so it becomes a static history entry
@@ -81,8 +83,8 @@ export async function updateNP(guildId: string, overrideFav?: boolean): Promise<
   }
 
   const isFav = overrideFav ?? (cur.track.isFavorite || false);
-
-  const embed = nowPlayingEmbed(cur.track, calcPosition(guildId), q.volume, cur.requestedBy);
+  const nextTrack = getNextTrack(guildId);
+  const embed = nowPlayingEmbed(cur.track, calcPosition(guildId), q.volume, cur.requestedBy, nextTrack?.track ?? null);
   const rows = getPlaybackButtons(q.isPaused, q.loopMode, isFav);
   await msg.edit({ embeds: [embed], components: rows }).catch(() => {});
 }

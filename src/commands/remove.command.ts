@@ -1,5 +1,6 @@
 import { ChatInputCommandInteraction, SlashCommandBuilder, EmbedBuilder } from 'discord.js';
 import { getQueue, removeTrack } from '../services/queue.service';
+import { playCurrent } from '../services/player.service';
 
 export const data = new SlashCommandBuilder()
   .setName('remove')
@@ -16,8 +17,20 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
     return;
   }
 
-  const track = removeTrack(guildId, position);
-  if (track) {
-    await interaction.reply({ embeds: [new EmbedBuilder().setColor(0x57F287).setDescription(`✅ Removed **${track.name}** from queue`)] });
+  const removed = removeTrack(guildId, position);
+
+  if (!removed) return;
+
+  if (position === queue.currentIndex && queue.isPlaying) {
+    const { skipTrack } = await import('../services/queue.service');
+    const next = skipTrack(guildId);
+    if (next) {
+      queue.seekOffset = 0;
+      await playCurrent(guildId, interaction.channel as any);
+    } else {
+      queue.isPlaying = false;
+    }
   }
+
+  await interaction.reply({ embeds: [new EmbedBuilder().setColor(0x57F287).setDescription(`✅ Removed **${removed.name}** from queue`)] });
 }

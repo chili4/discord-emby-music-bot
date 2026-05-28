@@ -8,6 +8,7 @@ export class EmbyClient {
   private api: AxiosInstance;
   private accessToken = '';
   private userId = '';
+  private refreshTimer: NodeJS.Timeout | null = null;
 
   constructor() {
     this.api = axios.create({
@@ -34,6 +35,8 @@ export class EmbyClient {
       this.api.defaults.headers.common['X-Emby-Token'] = this.accessToken;
 
       logger.info(`Authenticated as ${res.data.User.Name} (${this.userId})`);
+
+      this.startRefreshTimer();
     } catch (err: any) {
       const detail = err?.response
         ? `Status ${err.response.status}: ${JSON.stringify(err.response.data)}`
@@ -41,6 +44,19 @@ export class EmbyClient {
       logger.error(`Emby auth failed (${config.EMBY_URL}): ${detail}`);
       throw new Error(`Failed to authenticate with Emby: ${detail}`);
     }
+  }
+
+  private startRefreshTimer(): void {
+    if (this.refreshTimer) clearInterval(this.refreshTimer);
+    this.refreshTimer = setInterval(async () => {
+      logger.debug('Refreshing Emby session...');
+      try {
+        await this.authenticate();
+        logger.info('Emby session refreshed successfully');
+      } catch (e) {
+        logger.error('Emby session refresh failed:', e);
+      }
+    }, 4 * 60 * 60 * 1000);
   }
 
   getUserId(): string {

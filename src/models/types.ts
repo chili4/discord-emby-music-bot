@@ -94,4 +94,5 @@ export interface AudioPlayerConnection {
   connection: import('@discordjs/voice').VoiceConnection;
   resource: AudioResource | null;
   startTime: number;
+  playingStartTime: number;
 }
