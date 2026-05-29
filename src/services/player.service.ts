@@ -316,7 +316,10 @@ function getAudioPlayer(guildId: string): AudioPlayer {
           const next = skipTrack(guildId);
           if (next) {
             const idxBefore = q.currentIndex;
-            await disableNP(guildId);
+            // Fire and forget: disabling the old NP is cosmetic. Blocking the
+            // transition on a Discord API edit can delay the next track by 20+
+            // seconds if the VPS is rate-limited or the network is slow.
+            disableNP(guildId).catch(() => {});
             if (q.currentIndex !== idxBefore) { q.processingEnd = false; return; }
             q.seekOffset = 0;
             await playCurrent(guildId);
@@ -335,7 +338,7 @@ function getAudioPlayer(guildId: string): AudioPlayer {
 
         if (q.loopMode === 'one') {
           if (q.playGuard) { q.processingEnd = false; return; }
-          await disableNP(guildId);
+          disableNP(guildId).catch(() => {});
           q.seekOffset = 0;
           await playCurrent(guildId);
           q.processingEnd = false;
@@ -346,7 +349,7 @@ function getAudioPlayer(guildId: string): AudioPlayer {
         const next = skipTrack(guildId);
         if (next) {
           const idxBefore = q.currentIndex;
-          await disableNP(guildId);
+          disableNP(guildId).catch(() => {});
           if (q.currentIndex !== idxBefore) { q.processingEnd = false; return; }
           q.seekOffset = 0;
           await playCurrent(guildId);
