@@ -88,6 +88,7 @@ export async function playCurrent(guildId: string, channel?: TextChannel, sendNp
     q.ffmpegErrorCount = 0;
 
     stopNpTimer(guildId);
+    stopScrobble(guildId);
 
     q.processingEnd = false;
 
@@ -97,6 +98,7 @@ export async function playCurrent(guildId: string, channel?: TextChannel, sendNp
     const args: string[] = [
       '-user_agent', 'VLC/3.0.20',
       '-headers', `X-Emby-Token: ${embyClient.getAccessToken()}\r\n`,
+      '-threads', '1',
     ];
     if (q.seekOffset > 0) {
       args.push('-ss', String(q.seekOffset));
