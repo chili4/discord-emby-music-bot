@@ -74,10 +74,10 @@ export async function sendNP(channel: TextChannel, guildId: string): Promise<Mes
   return msg;
 }
 
-let _updateLock = '';
+const _updateLocks = new Set<string>();
 export async function updateNP(guildId: string, overrideFav?: boolean): Promise<void> {
-  if (_updateLock === guildId) return;
-  _updateLock = guildId;
+  if (_updateLocks.has(guildId)) return;
+  _updateLocks.add(guildId);
   try {
     const q = getQueue(guildId);
     const cur = getCurrentTrack(guildId);
@@ -92,7 +92,7 @@ export async function updateNP(guildId: string, overrideFav?: boolean): Promise<
     const rows = getPlaybackButtons(q.isPaused, q.loopMode, isFav);
     await msg.edit({ embeds: [embed], components: rows }).catch(() => {});
   } finally {
-    _updateLock = '';
+    _updateLocks.delete(guildId);
   }
 }
 
@@ -135,7 +135,7 @@ export function startNpTimer(guildId: string): void {
   stopNpTimer(guildId);
   const q = getQueue(guildId);
   q.npTimer = setInterval(() => {
-    try { updateNP(guildId); } catch (e) { logger.error(`Timer: ${(e as Error).message}`); }
+    updateNP(guildId).catch((e) => logger.error(`Timer error: ${e.message}`));
   }, 1_000);
 }
 
