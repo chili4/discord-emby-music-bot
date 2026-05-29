@@ -113,7 +113,7 @@ async function handleButton(interaction: ButtonInteraction) {
         q.connection!.playingStartTime = Date.now();
       } else {
         q.connection!.playingStartTime = Date.now();
-        await playCurrent(g);
+        await playCurrent(g, undefined, false);
       }
       break;
     }
@@ -128,7 +128,7 @@ async function handleButton(interaction: ButtonInteraction) {
         q.connection!.playingStartTime = Date.now();
       } else {
         q.connection!.playingStartTime = Date.now();
-        await playCurrent(g);
+        await playCurrent(g, undefined, false);
       }
       break;
     }
@@ -195,7 +195,7 @@ async function handleSelectMenu(interaction: import('discord.js').StringSelectMe
         q.connection!.playingStartTime = Date.now();
       } else {
         q.connection!.playingStartTime = Date.now();
-        await playCurrent(g);
+        await playCurrent(g, undefined, false);
       }
     }
   }

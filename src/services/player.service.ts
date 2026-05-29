@@ -64,7 +64,7 @@ export async function connectToChannel(member: GuildMember): Promise<VoiceConnec
   return conn;
 }
 
-export async function playCurrent(guildId: string, channel?: TextChannel) {
+export async function playCurrent(guildId: string, channel?: TextChannel, sendNp = true) {
   const q = getQueue(guildId);
   const cur = getCurrentTrack(guildId);
   if (!cur || !q.connection) {
@@ -175,17 +175,18 @@ export async function playCurrent(guildId: string, channel?: TextChannel) {
       await new Promise<void>(resolve => oldFf.once('exit', () => resolve()));
     }
 
-    // When the track changes (new FFmpeg), send a fresh NP message.
-    // The old one gets its buttons removed so it becomes a static history entry.
-    if (channel) {
-      await sendNP(channel, guildId);
-    } else {
-      const storedChannel = await resolveStoredChannel(guildId);
-      if (storedChannel) await sendNP(storedChannel, guildId);
+    // Only send a fresh NP message when the caller requests it (track changes:
+    // next/prev/natural-end). Seek operations (rewind/forward/seekbar) set
+    // sendNp=false and let the button handler's updateNP edit the existing
+    // message in-place, avoiding duplicate NP messages for the same track.
+    if (sendNp) {
+      if (channel) {
+        await sendNP(channel, guildId);
+      } else {
+        const storedChannel = await resolveStoredChannel(guildId);
+        if (storedChannel) await sendNP(storedChannel, guildId);
+      }
     }
-
-    // Timer starts when Playing fires (right after audio begins), not here,
-    // so the position faithfully shows seekOffset without drifting during buffering.
 
     ff.on('error', (e) => logger.error(`FF: ${e.message}`));
     ff.on('exit', (code) => {

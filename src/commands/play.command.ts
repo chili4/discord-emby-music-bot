@@ -103,6 +103,9 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
 
   if (next) {
     addTrackNext(guildId, first, interaction.user.id);
+    // Refresh the NP's "Up Next" field to show the newly inserted track
+    const { updateNP } = await import('../services/nowplaying.service');
+    await updateNP(guildId).catch(() => {});
     await interaction.editReply({ embeds: [new EmbedBuilder().setColor(0x57F287).setDescription(`✅ **${first.name}** will play next`)] });
     return;
   }
