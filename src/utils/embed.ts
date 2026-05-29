@@ -44,7 +44,7 @@ export function nowPlayingEmbed(track: Track, position: number, volume: number, 
   }
 
   if (requestedBy) {
-    e.setFooter({ text: `Pedido por @${requestedBy}` });
+    e.setFooter({ text: `Pedido por ${requestedBy}` });
   }
 
   const img = imgUrl(track);

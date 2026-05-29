@@ -102,7 +102,7 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
   const first = tracksToPlay[0];
 
   if (next) {
-    addTrackNext(guildId, first, interaction.user.id);
+    addTrackNext(guildId, first, (interaction.member as any)?.displayName || interaction.user.username);
     // Refresh the NP's "Up Next" field to show the newly inserted track
     const { updateNP } = await import('../services/nowplaying.service');
     await updateNP(guildId).catch(() => {});
@@ -138,7 +138,7 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
     queue.items = savedItems;
     queue.currentIndex = Math.max(0, savedIndex);
     for (const t of tracksToPlay) {
-      queue.items.splice(queue.currentIndex + 1, 0, { track: t, requestedBy: interaction.user.id });
+      queue.items.splice(queue.currentIndex + 1, 0, { track: t, requestedBy: (interaction.member as any)?.displayName || interaction.user.username });
       queue.currentIndex++;
     }
     queue.seekOffset = 0;
@@ -155,7 +155,7 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
   }
 
   const qWasEmpty = getQueue(guildId).items.length === 0;
-  await playTracks(guildId, tracksToPlay, interaction.user.id, interaction.channel as any);
+  await playTracks(guildId, tracksToPlay, (interaction.member as any)?.displayName || interaction.user.username, interaction.channel as any);
   const count = tracksToPlay.length;
   const desc = qWasEmpty
     ? (count > 1 ? `✅ Playing **${first.name}** (${count} tracks)` : `✅ Playing **${first.name}**`)

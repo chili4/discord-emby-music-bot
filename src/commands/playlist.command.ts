@@ -181,7 +181,7 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
       queue.connection = { audioPlayer: null as any, connection, resource: null, playingStartTime: 0 };
     }
     const tracks = sorted.map(i => embyClient.itemToTrack(i));
-    await playTracks(guildId, tracks, interaction.user.id, interaction.channel as any);
+    await playTracks(guildId, tracks, (interaction.member as any)?.displayName || interaction.user.username, interaction.channel as any);
     const sortLabel = sort !== 'normal' ? ` (${sort})` : '';
     await interaction.editReply({ embeds: [new EmbedBuilder().setColor(0x57F287).setDescription(`▶️ Playing **${label}**${sortLabel} — ${tracks.length} tracks`)] });
 
