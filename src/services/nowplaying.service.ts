@@ -66,6 +66,10 @@ export async function sendNP(channel: TextChannel, guildId: string): Promise<Mes
   if (msg) {
     q.npMessageId = msg.id;
     q.npChannelId = msg.channelId;
+  } else {
+    // send failed — clear stale state so updateNP doesn't corrupt old messages
+    q.npMessageId = null;
+    q.npChannelId = null;
   }
   return msg;
 }

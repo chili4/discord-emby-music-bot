@@ -79,9 +79,12 @@ export async function playCurrent(guildId: string, channel?: TextChannel, sendNp
   }
   q.playGuard = true;
   try {
-    // Reset per-track state before sendNP or anything else reads it.
-    q.connection!.playingStartTime = 0;
-    q.connection!.startTime = 0;
+    // Set playingStartTime to now (instead of 0) so calcPosition doesn't fall
+    // into the falsy branch and get stuck at seekOffset without progressing.
+    // The Playing event will later overwrite this with the exact timestamp,
+    // correcting any small drift incurred during the FFmpeg buffering gap.
+    q.connection!.playingStartTime = Date.now();
+    q.connection!.startTime = Date.now();
     q.lastFfExitCode = null;
     q.ffmpegErrorCount = 0;
 
