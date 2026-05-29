@@ -79,11 +79,11 @@ export async function playCurrent(guildId: string, channel?: TextChannel, sendNp
   }
   q.playGuard = true;
   try {
-    // Set playingStartTime to now (instead of 0) so calcPosition doesn't fall
-    // into the falsy branch and get stuck at seekOffset without progressing.
-    // The Playing event will later overwrite this with the exact timestamp,
-    // correcting any small drift incurred during the FFmpeg buffering gap.
-    q.connection!.playingStartTime = Date.now();
+    // Reset playingStartTime: sendNP shows seekOffset (correct start position),
+    // and the Playing handler sets the real timestamp when audio begins.
+    // Setting it to Date.now() here causes a backward jump when the Playing
+    // event overwrites it ~3s later (especially visible on seeks).
+    q.connection!.playingStartTime = 0;
     q.lastFfExitCode = null;
     q.ffmpegErrorCount = 0;
 
@@ -97,7 +97,6 @@ export async function playCurrent(guildId: string, channel?: TextChannel, sendNp
     const args: string[] = [
       '-user_agent', 'VLC/3.0.20',
       '-headers', `X-Emby-Token: ${embyClient.getAccessToken()}\r\n`,
-      '-threads', '1',
     ];
     if (q.seekOffset > 0) {
       args.push('-ss', String(q.seekOffset));
