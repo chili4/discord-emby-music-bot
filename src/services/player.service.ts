@@ -94,10 +94,10 @@ export async function playCurrent(guildId: string, channel?: TextChannel, sendNp
     const url = embyClient.getStreamUrl(cur.track.id, q.seekOffset);
     logger.debug(`Playing: ${cur.track.name} (id=${cur.track.id})`);
 
-    const vol = Math.round(Math.pow(q.volume / 100, 0.6) * 100);
     const args: string[] = [
       '-user_agent', 'VLC/3.0.20',
       '-headers', `X-Emby-Token: ${embyClient.getAccessToken()}\r\n`,
+      '-threads', '1',
     ];
     if (q.seekOffset > 0) {
       args.push('-ss', String(q.seekOffset));
@@ -105,7 +105,6 @@ export async function playCurrent(guildId: string, channel?: TextChannel, sendNp
     args.push('-i', url);
     args.push(
       '-loglevel', 'warning',
-      '-af', `volume=${vol}/100`,
       '-acodec', 'libopus',
       '-application', 'audio',
       '-f', 'opus',
@@ -139,7 +138,8 @@ export async function playCurrent(guildId: string, channel?: TextChannel, sendNp
       if (stderrBuf.length > 2048) stderrBuf = stderrBuf.slice(-1024);
     });
 
-    const res = createAudioResource(ff.stdout, { inlineVolume: false });
+    const res = createAudioResource(ff.stdout, { inlineVolume: true });
+    res.volume?.setVolume(Math.pow(q.volume / 100, 0.6));
     const player = getAudioPlayer(guildId);
     q.connection.audioPlayer = player;
     q.connection.resource = res;
@@ -377,7 +377,10 @@ function getAudioPlayer(guildId: string): AudioPlayer {
 }
 
 export function setVolume(guildId: string, vol: number) {
-  getQueue(guildId).volume = Math.max(0, Math.min(150, vol));
+  const q = getQueue(guildId);
+  q.volume = Math.max(0, Math.min(150, vol));
+  // Apply to current resource instantly (no FFmpeg restart needed with inlineVolume)
+  q.connection?.resource?.volume?.setVolume(Math.pow(q.volume / 100, 0.6));
 }
 
 export async function stopAndClear(guildId: string) {
