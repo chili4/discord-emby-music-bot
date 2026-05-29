@@ -45,7 +45,7 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
       await interaction.editReply({ embeds: [new EmbedBuilder().setColor(0xED4245).setDescription('❌ Could not join your voice channel')] });
       return;
     }
-    queue.connection = { audioPlayer: null as any, connection, resource: null, startTime: 0, playingStartTime: 0 };
+    queue.connection = { audioPlayer: null as any, connection, resource: null, playingStartTime: 0 };
   } else {
     const connection = await reconnectVoiceChannel(member);
     if (!connection) {
@@ -130,7 +130,7 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
       return;
     }
     queue.connection = {
-      audioPlayer: null as any, connection, resource: null, startTime: 0, playingStartTime: 0,
+      audioPlayer: null as any, connection, resource: null, playingStartTime: 0,
     };
 
     // Restore queue: insert new track(s) immediately after the old current

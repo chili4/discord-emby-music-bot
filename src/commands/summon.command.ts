@@ -28,7 +28,6 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
     audioPlayer: null as any,
     connection,
     resource: null,
-    startTime: 0,
     playingStartTime: 0,
   };
 

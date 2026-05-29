@@ -1,10 +1,5 @@
 import { AudioResource } from '@discordjs/voice';
 
-export interface EmbyCredentials {
-  username: string;
-  password: string;
-}
-
 export interface EmbyAuthResult {
   AccessToken: string;
   User: { Id: string; Name: string };
@@ -94,6 +89,5 @@ export interface AudioPlayerConnection {
   audioPlayer: import('@discordjs/voice').AudioPlayer;
   connection: import('@discordjs/voice').VoiceConnection;
   resource: AudioResource | null;
-  startTime: number;
   playingStartTime: number;
 }

@@ -84,7 +84,6 @@ export async function playCurrent(guildId: string, channel?: TextChannel, sendNp
     // The Playing event will later overwrite this with the exact timestamp,
     // correcting any small drift incurred during the FFmpeg buffering gap.
     q.connection!.playingStartTime = Date.now();
-    q.connection!.startTime = Date.now();
     q.lastFfExitCode = null;
     q.ffmpegErrorCount = 0;
 
@@ -160,7 +159,6 @@ export async function playCurrent(guildId: string, channel?: TextChannel, sendNp
     player.on(AudioPlayerStatus.Playing, () => {
       if (timersStarted) return;
       timersStarted = true;
-      q.connection!.startTime = Date.now();
       q.connection!.playingStartTime = Date.now();
       // Start NP timer immediately when playback begins so the progress bar
       // updates from the first second (no 3s gap where position stays at 0).
@@ -303,7 +301,6 @@ function getAudioPlayer(guildId: string): AudioPlayer {
         logger.debug(`FFmpeg error (${q.lastFfExitCode}), skipping to next track`);
         q.lastFfExitCode = null;
         q.connection!.playingStartTime = 0;
-        q.connection!.startTime = 0;
         const next = skipTrack(guildId);
         if (next) {
           q.seekOffset = 0;
@@ -325,7 +322,6 @@ function getAudioPlayer(guildId: string): AudioPlayer {
       if (q.loopMode === 'one') {
         q.seekOffset = 0;
         q.connection!.playingStartTime = 0;
-        q.connection!.startTime = 0;
         await disableNP(guildId);
         await playCurrent(guildId);
         q.processingEnd = false;
@@ -336,7 +332,6 @@ function getAudioPlayer(guildId: string): AudioPlayer {
       if (next) {
         q.seekOffset = 0;
         q.connection!.playingStartTime = 0;
-        q.connection!.startTime = 0;
         await disableNP(guildId);
         await playCurrent(guildId);
       } else {
@@ -386,30 +381,6 @@ export async function stopAndClear(guildId: string) {
   const ff = ffmpegProcesses.get(guildId);
   if (ff) { ff.kill(); ffmpegProcesses.delete(guildId); }
   await clearNP(guildId);
-}
-
-export async function clearUpcoming(guildId: string) {
-  const q = getQueue(guildId);
-  const cur = getCurrentTrack(guildId);
-  if (cur) {
-    q.items = [cur];
-    q.currentIndex = 0;
-  } else {
-    q.items = [];
-    q.currentIndex = -1;
-  }
-  q.isPlaying = false;
-  q.isPaused = false;
-  q.seekOffset = 0;
-  q.playerGeneration = 0;
-  q.playGuard = false;
-  stopScrobble(guildId);
-  stopNpTimer(guildId);
-  if (q.connection?.audioPlayer) {
-    q.connection.audioPlayer.stop(true);
-  }
-  const ff = ffmpegProcesses.get(guildId);
-  if (ff) { ff.kill(); ffmpegProcesses.delete(guildId); }
 }
 
 export async function disconnect(guildId: string) {

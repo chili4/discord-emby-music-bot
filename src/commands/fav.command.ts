@@ -87,7 +87,7 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
         await interaction.editReply({ embeds: [new EmbedBuilder().setColor(0xED4245).setDescription('❌ Could not join your voice channel')] });
         return;
       }
-      queue.connection = { audioPlayer: null as any, connection, resource: null, startTime: 0, playingStartTime: 0 };
+      queue.connection = { audioPlayer: null as any, connection, resource: null, playingStartTime: 0 };
     }
     const tracks = favorites.map(i => embyClient.itemToTrack(i));
     await playTracks(guildId, tracks, interaction.user.id, interaction.channel as any);

@@ -222,10 +222,6 @@ export class EmbyClient {
     return url;
   }
 
-  getTranscodeUrl(itemId: string): string {
-    return `${config.EMBY_URL}/Audio/${itemId}/stream?api_key=${this.accessToken}&TranscodeReasons=ContainerBitrateExceedsLimit&AudioCodec=mp3&MaxAudioChannels=2&StartTimeTicks=0&SubtitleMethod=Encode`;
-  }
-
   hintToTrack(hint: EmbySearchHint): Track {
     return {
       id: hint.ItemId || hint.Id,
