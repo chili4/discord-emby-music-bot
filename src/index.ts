@@ -77,9 +77,9 @@ async function handleButton(interaction: ButtonInteraction) {
 
   switch (interaction.customId) {
     case 'pause': {
-      if (q.connection?.playingStartTime) {
-        q.seekOffset += Math.floor((Date.now() - q.connection.playingStartTime) / 1000);
-      }
+      // Always snapshot the position, even if playingStartTime is 0
+      // (otherwise the pause offset is silently lost and the position jumps).
+      q.seekOffset += Math.floor((Date.now() - (q.connection?.playingStartTime || Date.now())) / 1000);
       q.connection?.audioPlayer?.pause();
       q.isPaused = true;
       break;
@@ -94,6 +94,7 @@ async function handleButton(interaction: ButtonInteraction) {
       q.skipGuard = true;
       const n = skipTrack(g);
       if (n) { q.seekOffset = 0; await playCurrent(g); }
+      else { q.skipGuard = false; }
       break;
     }
     case 'prev': {
@@ -118,11 +119,11 @@ async function handleButton(interaction: ButtonInteraction) {
       break;
     }
     case 'forward': {
-      const cur = getCurrentTrack(g);
+      const dur = getCurrentTrack(g)?.track.duration || 0;
       if (q.connection?.playingStartTime) {
         q.seekOffset += Math.floor((Date.now() - q.connection.playingStartTime) / 1000);
       }
-      q.seekOffset = Math.min((cur?.track.duration || 0) - 1, q.seekOffset + 30);
+      q.seekOffset = Math.min(Math.max(0, dur - 1), q.seekOffset + 30);
       q.skipGuard = true;
       if (q.isPaused) {
         q.connection!.playingStartTime = Date.now();
@@ -187,14 +188,14 @@ async function handleSelectMenu(interaction: import('discord.js').StringSelectMe
   if (interaction.customId === 'seekbar') {
     const pct = parseInt(interaction.values[0], 10);
     const cur = getCurrentTrack(g);
-    if (cur) {
+    if (cur && q.connection) {
       const target = Math.floor((pct / 100) * cur.track.duration);
       q.seekOffset = target;
       q.skipGuard = true;
       if (q.isPaused) {
-        q.connection!.playingStartTime = Date.now();
+        q.connection.playingStartTime = Date.now();
       } else {
-        q.connection!.playingStartTime = Date.now();
+        q.connection.playingStartTime = Date.now();
         await playCurrent(g, undefined, false);
       }
     }

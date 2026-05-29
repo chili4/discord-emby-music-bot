@@ -312,9 +312,12 @@ function getAudioPlayer(guildId: string): AudioPlayer {
         if (isError) {
           logger.debug(`FFmpeg error (${q.lastFfExitCode}), skipping to next track`);
           q.lastFfExitCode = null;
+          if (q.playGuard) { q.processingEnd = false; return; }
           const next = skipTrack(guildId);
           if (next) {
+            const idxBefore = q.currentIndex;
             await disableNP(guildId);
+            if (q.currentIndex !== idxBefore) { q.processingEnd = false; return; }
             q.seekOffset = 0;
             await playCurrent(guildId);
           } else {
@@ -331,6 +334,7 @@ function getAudioPlayer(guildId: string): AudioPlayer {
         }
 
         if (q.loopMode === 'one') {
+          if (q.playGuard) { q.processingEnd = false; return; }
           await disableNP(guildId);
           q.seekOffset = 0;
           await playCurrent(guildId);
@@ -338,9 +342,12 @@ function getAudioPlayer(guildId: string): AudioPlayer {
           return;
         }
 
+        if (q.playGuard) { q.processingEnd = false; return; }
         const next = skipTrack(guildId);
         if (next) {
+          const idxBefore = q.currentIndex;
           await disableNP(guildId);
+          if (q.currentIndex !== idxBefore) { q.processingEnd = false; return; }
           q.seekOffset = 0;
           await playCurrent(guildId);
         } else {
