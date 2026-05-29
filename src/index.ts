@@ -176,7 +176,7 @@ async function handleButton(interaction: ButtonInteraction) {
   }
 
   await updateNP(g);
-  await interaction.editReply({}).catch(() => {});
+  return;
 }
 
 async function handleSelectMenu(interaction: import('discord.js').StringSelectMenuInteraction) {
@@ -201,7 +201,7 @@ async function handleSelectMenu(interaction: import('discord.js').StringSelectMe
   }
 
   await updateNP(g);
-  await interaction.editReply({}).catch(() => {});
+  return;
 }
 
 (async () => {

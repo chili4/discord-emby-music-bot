@@ -111,7 +111,7 @@ export async function playCurrent(guildId: string, channel?: TextChannel, sendNp
       '-f', 'opus',
       '-ar', '48000',
       '-ac', '2',
-      '-b:a', '160k',
+      '-b:a', '128k',
       'pipe:1',
     );
 
