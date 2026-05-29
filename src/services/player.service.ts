@@ -312,11 +312,10 @@ function getAudioPlayer(guildId: string): AudioPlayer {
         if (isError) {
           logger.debug(`FFmpeg error (${q.lastFfExitCode}), skipping to next track`);
           q.lastFfExitCode = null;
-          q.connection.playingStartTime = 0;
           const next = skipTrack(guildId);
           if (next) {
-            q.seekOffset = 0;
             await disableNP(guildId);
+            q.seekOffset = 0;
             await playCurrent(guildId);
           } else {
             q.isPlaying = false;
@@ -332,9 +331,8 @@ function getAudioPlayer(guildId: string): AudioPlayer {
         }
 
         if (q.loopMode === 'one') {
-          q.seekOffset = 0;
-          q.connection.playingStartTime = 0;
           await disableNP(guildId);
+          q.seekOffset = 0;
           await playCurrent(guildId);
           q.processingEnd = false;
           return;
@@ -342,9 +340,8 @@ function getAudioPlayer(guildId: string): AudioPlayer {
 
         const next = skipTrack(guildId);
         if (next) {
-          q.seekOffset = 0;
-          q.connection.playingStartTime = 0;
           await disableNP(guildId);
+          q.seekOffset = 0;
           await playCurrent(guildId);
         } else {
           q.isPlaying = false;

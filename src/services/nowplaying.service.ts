@@ -74,23 +74,26 @@ export async function sendNP(channel: TextChannel, guildId: string): Promise<Mes
   return msg;
 }
 
+let _updateLock = '';
 export async function updateNP(guildId: string, overrideFav?: boolean): Promise<void> {
-  const q = getQueue(guildId);
-  const cur = getCurrentTrack(guildId);
-  if (!cur || !q.npMessageId) return;
+  if (_updateLock === guildId) return;
+  _updateLock = guildId;
+  try {
+    const q = getQueue(guildId);
+    const cur = getCurrentTrack(guildId);
+    if (!cur || !q.npMessageId) return;
 
-  const msg = await resolveMessage(guildId);
-  if (!msg) {
-    const ch = await resolveChannel(guildId);
-    if (ch) await sendNP(ch, guildId);
-    return;
+    const msg = await resolveMessage(guildId);
+    if (!msg) return;
+
+    const isFav = overrideFav ?? (cur.track.isFavorite || false);
+    const nextTrack = getNextTrack(guildId);
+    const embed = nowPlayingEmbed(cur.track, calcPosition(guildId), q.volume, cur.requestedBy, nextTrack?.track ?? null);
+    const rows = getPlaybackButtons(q.isPaused, q.loopMode, isFav);
+    await msg.edit({ embeds: [embed], components: rows }).catch(() => {});
+  } finally {
+    _updateLock = '';
   }
-
-  const isFav = overrideFav ?? (cur.track.isFavorite || false);
-  const nextTrack = getNextTrack(guildId);
-  const embed = nowPlayingEmbed(cur.track, calcPosition(guildId), q.volume, cur.requestedBy, nextTrack?.track ?? null);
-  const rows = getPlaybackButtons(q.isPaused, q.loopMode, isFav);
-  await msg.edit({ embeds: [embed], components: rows }).catch(() => {});
 }
 
 export async function disableNP(guildId: string): Promise<void> {
@@ -131,7 +134,9 @@ export async function clearNP(guildId: string): Promise<void> {
 export function startNpTimer(guildId: string): void {
   stopNpTimer(guildId);
   const q = getQueue(guildId);
-  q.npTimer = setInterval(() => updateNP(guildId), 1_000);
+  q.npTimer = setInterval(() => {
+    try { updateNP(guildId); } catch (e) { logger.error(`Timer: ${(e as Error).message}`); }
+  }, 1_000);
 }
 
 export function stopNpTimer(guildId: string): void {
