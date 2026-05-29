@@ -25,6 +25,6 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
   }
 
   const tracks = items.map(i => embyClient.itemToTrack(i));
-  await playTracks(guildId, tracks, interaction.user.id, interaction.channel as any);
+  await playTracks(guildId, tracks, (interaction.member as any)?.displayName || interaction.user.username, interaction.channel as any);
   await interaction.editReply({ embeds: [new EmbedBuilder().setColor(0x57F287).setDescription(`🎲 Added **${tracks.length}** random tracks`)] });
 }

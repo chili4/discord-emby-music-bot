@@ -27,6 +27,6 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
     return;
   }
 
-  await playTracks(guildId, result.tracks, interaction.user.id, interaction.channel as any);
+  await playTracks(guildId, result.tracks, (interaction.member as any)?.displayName || interaction.user.username, interaction.channel as any);
   await interaction.editReply({ embeds: [new EmbedBuilder().setColor(0x57F287).setDescription(`✅ Enqueued **${result.tracks.length}** tracks`)] });
 }
