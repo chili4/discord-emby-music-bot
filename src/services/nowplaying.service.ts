@@ -26,9 +26,9 @@ async function resolveMessage(guildId: string): Promise<Message | null> {
 function calcPosition(guildId: string): number {
   const q = getQueue(guildId);
   let pos = q.seekOffset;
-  // playingStartTime tracks from when audio started playing (after FFmpeg buffer fill)
-  if (q.connection?.playingStartTime && !q.isPaused) {
-    pos += Math.floor((Date.now() - q.connection.playingStartTime) / 1000);
+  const pst = q.connection?.playingStartTime;
+  if (pst !== undefined && pst > 0 && !q.isPaused) {
+    pos += Math.floor((Date.now() - pst) / 1000);
   }
   const cur = getCurrentTrack(guildId);
   return Math.min(pos, cur?.track.duration || 0);

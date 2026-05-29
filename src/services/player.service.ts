@@ -16,7 +16,7 @@ import { logger } from '../utils/logger';
 import { getQueue, getCurrentTrack, skipTrack, removeQueue } from './queue.service';
 import { startScrobble, stopScrobble } from './scrobble.service';
 import {
-  sendNP, updateNP, disableNP, clearNP,
+  sendNP, disableNP, clearNP,
   startNpTimer, stopNpTimer,
 } from './nowplaying.service';
 import { simpleEmbed } from '../utils/embed';
@@ -175,18 +175,17 @@ export async function playCurrent(guildId: string, channel?: TextChannel) {
       await new Promise<void>(resolve => oldFf.once('exit', () => resolve()));
     }
 
-    // Update existing NP in-place to avoid duplicate messages. Only send a
-    // fresh NP if none exists yet (first track or cleared).
-    if (q.npMessageId) {
-      await updateNP(guildId);
-    } else if (channel) {
+    // When the track changes (new FFmpeg), send a fresh NP message.
+    // The old one gets its buttons removed so it becomes a static history entry.
+    if (channel) {
       await sendNP(channel, guildId);
     } else {
       const storedChannel = await resolveStoredChannel(guildId);
       if (storedChannel) await sendNP(storedChannel, guildId);
     }
 
-    startNpTimer(guildId);
+    // Timer starts when Playing fires (right after audio begins), not here,
+    // so the position faithfully shows seekOffset without drifting during buffering.
 
     ff.on('error', (e) => logger.error(`FF: ${e.message}`));
     ff.on('exit', (code) => {
