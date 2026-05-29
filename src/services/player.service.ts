@@ -266,44 +266,83 @@ function getAudioPlayer(guildId: string): AudioPlayer {
     players.set(guildId, p);
 
     p.on(AudioPlayerStatus.Idle, async () => {
-      const q = getQueue(guildId);
+      try {
+        const q = getQueue(guildId);
 
-      // Player generation guard: discard events from a previous player's zombie
-      // listeners. Each playCurrent increments playerGeneration.
-      if (q.playerGeneration === 0) return;
-      const expectedGen = q.playerGeneration;
+        // Player generation guard: discard events from a previous player's zombie
+        // listeners. Each playCurrent increments playerGeneration.
+        if (q.playerGeneration === 0) return;
+        const expectedGen = q.playerGeneration;
 
-      // Reentry guard: prevents this handler from running twice for the same
-      // natural track end (zombie listener + real Idle).
-      if (q.processingEnd) return;
-      q.processingEnd = true;
+        // Reentry guard: prevents this handler from running twice for the same
+        // natural track end (zombie listener + real Idle).
+        if (q.processingEnd) return;
+        q.processingEnd = true;
 
-      // Stale event guard: if playerGeneration changed while this Idle event
-      // was queued (e.g. a new playCurrent started), the event is from a
-      // previous track and should be ignored.
-      if (q.playerGeneration !== expectedGen) {
-        q.processingEnd = false;
-        return;
-      }
+        // Stale event guard: if playerGeneration changed while this Idle event
+        // was queued (e.g. a new playCurrent started), the event is from a
+        // previous track and should be ignored.
+        if (q.playerGeneration !== expectedGen) {
+          q.processingEnd = false;
+          return;
+        }
 
-      // Guard: user pressed skip/prev button (handles skipTrack itself).
-      // The button handler's playCurrent will re-start after oldFf.kill await completes.
-      if (q.skipGuard) {
-        q.skipGuard = false;
-        q.processingEnd = false;
-        return;
-      }
+        // Guard: user pressed skip/prev button (handles skipTrack itself).
+        if (q.skipGuard) {
+          q.skipGuard = false;
+          q.processingEnd = false;
+          return;
+        }
 
-      // If FFmpeg errored, skip to next track immediately (don't wait).
-      // Reset playingStartTime so the new track shows correct position from the start.
-      const isError = q.lastFfExitCode !== null && q.lastFfExitCode !== 0;
-      if (isError) {
-        logger.debug(`FFmpeg error (${q.lastFfExitCode}), skipping to next track`);
-        q.lastFfExitCode = null;
-        q.connection!.playingStartTime = 0;
+        // Guard: connection disappeared (voice channel disconnect).
+        if (!q.connection) {
+          q.isPlaying = false;
+          q.isPaused = false;
+          q.items = [];
+          q.currentIndex = -1;
+          stopScrobble(guildId);
+          stopNpTimer(guildId);
+          await clearNP(guildId);
+          q.processingEnd = false;
+          return;
+        }
+
+        const isError = q.lastFfExitCode !== null && q.lastFfExitCode !== 0;
+        if (isError) {
+          logger.debug(`FFmpeg error (${q.lastFfExitCode}), skipping to next track`);
+          q.lastFfExitCode = null;
+          q.connection.playingStartTime = 0;
+          const next = skipTrack(guildId);
+          if (next) {
+            q.seekOffset = 0;
+            await disableNP(guildId);
+            await playCurrent(guildId);
+          } else {
+            q.isPlaying = false;
+            q.isPaused = false;
+            q.items = [];
+            q.currentIndex = -1;
+            stopScrobble(guildId);
+            stopNpTimer(guildId);
+            await clearNP(guildId);
+          }
+          q.processingEnd = false;
+          return;
+        }
+
+        if (q.loopMode === 'one') {
+          q.seekOffset = 0;
+          q.connection.playingStartTime = 0;
+          await disableNP(guildId);
+          await playCurrent(guildId);
+          q.processingEnd = false;
+          return;
+        }
+
         const next = skipTrack(guildId);
         if (next) {
           q.seekOffset = 0;
+          q.connection.playingStartTime = 0;
           await disableNP(guildId);
           await playCurrent(guildId);
         } else {
@@ -316,34 +355,11 @@ function getAudioPlayer(guildId: string): AudioPlayer {
           await clearNP(guildId);
         }
         q.processingEnd = false;
-        return;
+      } catch (e) {
+        logger.error(`Idle handler error: ${(e as Error).message}`);
+        // Ensure processingEnd is reset so the next Idle event can proceed.
+        try { getQueue(guildId).processingEnd = false; } catch {}
       }
-
-      if (q.loopMode === 'one') {
-        q.seekOffset = 0;
-        q.connection!.playingStartTime = 0;
-        await disableNP(guildId);
-        await playCurrent(guildId);
-        q.processingEnd = false;
-        return;
-      }
-
-      const next = skipTrack(guildId);
-      if (next) {
-        q.seekOffset = 0;
-        q.connection!.playingStartTime = 0;
-        await disableNP(guildId);
-        await playCurrent(guildId);
-      } else {
-        q.isPlaying = false;
-        q.isPaused = false;
-        q.items = [];
-        q.currentIndex = -1;
-        stopScrobble(guildId);
-        stopNpTimer(guildId);
-        await clearNP(guildId);
-      }
-      q.processingEnd = false;
     });
 
     p.on('error', (e: Error) => {
