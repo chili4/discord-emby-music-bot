@@ -171,10 +171,9 @@ export async function playCurrent(guildId: string, channel?: TextChannel, sendNp
     q.processingEnd = false;
     q.playerGeneration++;
 
-    // Now await old FFmpeg exit (background cleanup — no longer blocks)
-    if (oldFf && oldFf.exitCode === null && oldFf.signalCode === null) {
-      await new Promise<void>(resolve => oldFf.once('exit', () => resolve()));
-    }
+    // Old FFmpeg was already killed and removed from the map — its exit
+    // handler has a guard that prevents state corruption. No need to await,
+    // that would block the interaction response for up to 15 seconds.
 
     // Only send a fresh NP message when the caller requests it (track changes:
     // next/prev/natural-end). Seek operations (rewind/forward/seekbar) set
