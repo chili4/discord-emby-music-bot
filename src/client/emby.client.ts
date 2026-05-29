@@ -211,12 +211,11 @@ export class EmbyClient {
     }
   }
 
-  getStreamUrl(itemId: string, seekSeconds = 0): string {
-    let url = `${config.EMBY_URL}/Audio/${itemId}/stream?api_key=${this.accessToken}&Static=true`;
-    if (seekSeconds > 0) {
-      url += `&StartTimeTicks=${seekSeconds * 10_000_000}`;
-    }
-    return url;
+  getStreamUrl(itemId: string, _seekSeconds = 0): string {
+    // Seeking is handled by FFmpeg's -ss (before -i for keyframe skip + after
+    // -i for sample-accurate positioning). Emby's StartTimeTicks would
+    // conflict with Static=true (which serves the raw file), so we omit it.
+    return `${config.EMBY_URL}/Audio/${itemId}/stream?api_key=${this.accessToken}&Static=true`;
   }
 
   getTranscodeUrl(itemId: string): string {
