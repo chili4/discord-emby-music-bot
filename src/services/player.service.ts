@@ -107,10 +107,11 @@ export async function playCurrent(guildId: string, channel?: TextChannel, sendNp
       '-loglevel', 'warning',
       '-af', `volume=${vol}/100`,
       '-acodec', 'libopus',
+      '-application', 'audio',
       '-f', 'opus',
       '-ar', '48000',
       '-ac', '2',
-      '-b:a', '128k',
+      '-b:a', '160k',
       'pipe:1',
     );
 
