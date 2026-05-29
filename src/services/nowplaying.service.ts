@@ -74,26 +74,19 @@ export async function sendNP(channel: TextChannel, guildId: string): Promise<Mes
   return msg;
 }
 
-const _updateLocks = new Set<string>();
 export async function updateNP(guildId: string, overrideFav?: boolean): Promise<void> {
-  if (_updateLocks.has(guildId)) return;
-  _updateLocks.add(guildId);
-  try {
-    const q = getQueue(guildId);
-    const cur = getCurrentTrack(guildId);
-    if (!cur || !q.npMessageId) return;
+  const q = getQueue(guildId);
+  const cur = getCurrentTrack(guildId);
+  if (!cur || !q.npMessageId) return;
 
-    const msg = await resolveMessage(guildId);
-    if (!msg) return;
+  const msg = await resolveMessage(guildId);
+  if (!msg) return;
 
-    const isFav = overrideFav ?? (cur.track.isFavorite || false);
-    const nextTrack = getNextTrack(guildId);
-    const embed = nowPlayingEmbed(cur.track, calcPosition(guildId), q.volume, cur.requestedBy, nextTrack?.track ?? null);
-    const rows = getPlaybackButtons(q.isPaused, q.loopMode, isFav);
-    await msg.edit({ embeds: [embed], components: rows }).catch(() => {});
-  } finally {
-    _updateLocks.delete(guildId);
-  }
+  const isFav = overrideFav ?? (cur.track.isFavorite || false);
+  const nextTrack = getNextTrack(guildId);
+  const embed = nowPlayingEmbed(cur.track, calcPosition(guildId), q.volume, cur.requestedBy, nextTrack?.track ?? null);
+  const rows = getPlaybackButtons(q.isPaused, q.loopMode, isFav);
+  await msg.edit({ embeds: [embed], components: rows }).catch(() => {});
 }
 
 export async function disableNP(guildId: string): Promise<void> {
