@@ -211,11 +211,15 @@ export class EmbyClient {
     }
   }
 
-  getStreamUrl(itemId: string, _seekSeconds = 0): string {
-    // Seeking is handled by FFmpeg's -ss (before -i for keyframe skip + after
-    // -i for sample-accurate positioning). Emby's StartTimeTicks would
-    // conflict with Static=true (which serves the raw file), so we omit it.
-    return `${config.EMBY_URL}/Audio/${itemId}/stream?api_key=${this.accessToken}&Static=true`;
+  getStreamUrl(itemId: string, seekSeconds = 0): string {
+    // StartTimeTicks tells Emby to begin the stream at the seek position.
+    // Emby pre-transcodes from there, reducing both bandwidth and CPU load
+    // on the bot (FFmpeg receives an already-positioned lower-bitrate stream).
+    let url = `${config.EMBY_URL}/Audio/${itemId}/stream?api_key=${this.accessToken}&Static=true`;
+    if (seekSeconds > 0) {
+      url += `&StartTimeTicks=${seekSeconds * 10_000_000}`;
+    }
+    return url;
   }
 
   getTranscodeUrl(itemId: string): string {

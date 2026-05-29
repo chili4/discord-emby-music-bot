@@ -101,17 +101,9 @@ export async function playCurrent(guildId: string, channel?: TextChannel, sendNp
       '-headers', `X-Emby-Token: ${embyClient.getAccessToken()}\r\n`,
     ];
     if (q.seekOffset > 0) {
-      // First -ss before -i: fast keyframe seek (approximate).
       args.push('-ss', String(q.seekOffset));
     }
     args.push('-i', url);
-    if (q.seekOffset > 0) {
-      // Second -ss after -i: sample-accurate seek within the decoded stream.
-      // Combined with the first -ss, FFmpeg jumps to the keyframe, then
-      // decodes forward to the exact second. This eliminates the mismatch
-      // between the timer position and the actual audio position.
-      args.push('-ss', String(q.seekOffset));
-    }
     args.push(
       '-loglevel', 'warning',
       '-af', `volume=${vol}/100`,
