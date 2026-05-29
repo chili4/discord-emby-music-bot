@@ -303,7 +303,7 @@ function getAudioPlayer(guildId: string): AudioPlayer {
           q.currentIndex = -1;
           stopScrobble(guildId);
           stopNpTimer(guildId);
-          clearNP(guildId).catch(() => {});
+          clearNP(guildId).catch((e: any) => logger.error(`clearNP: ${e.message}`));
           q.processingEnd = false;
           return;
         }
@@ -316,10 +316,7 @@ function getAudioPlayer(guildId: string): AudioPlayer {
           const next = skipTrack(guildId);
           if (next) {
             const idxBefore = q.currentIndex;
-            // Fire and forget: disabling the old NP is cosmetic. Blocking the
-            // transition on a Discord API edit can delay the next track by 20+
-            // seconds if the VPS is rate-limited or the network is slow.
-            disableNP(guildId).catch(() => {});
+            disableNP(guildId).catch((e: any) => logger.error(`disableNP: ${e.message}`));
             if (q.currentIndex !== idxBefore) { q.processingEnd = false; return; }
             q.seekOffset = 0;
             await playCurrent(guildId);
@@ -330,7 +327,7 @@ function getAudioPlayer(guildId: string): AudioPlayer {
             q.currentIndex = -1;
             stopScrobble(guildId);
             stopNpTimer(guildId);
-            clearNP(guildId).catch(() => {});
+            clearNP(guildId).catch((e: any) => logger.error(`clearNP: ${e.message}`));
           }
           q.processingEnd = false;
           return;
@@ -338,7 +335,7 @@ function getAudioPlayer(guildId: string): AudioPlayer {
 
         if (q.loopMode === 'one') {
           if (q.playGuard) { q.processingEnd = false; return; }
-          disableNP(guildId).catch(() => {});
+          disableNP(guildId).catch((e: any) => logger.error(`disableNP: ${e.message}`));
           q.seekOffset = 0;
           await playCurrent(guildId);
           q.processingEnd = false;
@@ -349,7 +346,7 @@ function getAudioPlayer(guildId: string): AudioPlayer {
         const next = skipTrack(guildId);
         if (next) {
           const idxBefore = q.currentIndex;
-          disableNP(guildId).catch(() => {});
+          disableNP(guildId).catch((e: any) => logger.error(`disableNP: ${e.message}`));
           if (q.currentIndex !== idxBefore) { q.processingEnd = false; return; }
           q.seekOffset = 0;
           await playCurrent(guildId);
@@ -360,7 +357,7 @@ function getAudioPlayer(guildId: string): AudioPlayer {
           q.currentIndex = -1;
           stopScrobble(guildId);
           stopNpTimer(guildId);
-          clearNP(guildId).catch(() => {});
+          clearNP(guildId).catch((e: any) => logger.error(`clearNP: ${e.message}`));
         }
         q.processingEnd = false;
       } catch (e) {
@@ -407,16 +404,20 @@ export async function stopAndClear(guildId: string) {
   }
   const ff = ffmpegProcesses.get(guildId);
   if (ff) { ff.kill(); ffmpegProcesses.delete(guildId); }
-  clearNP(guildId).catch(() => {});
 }
 
 export async function disconnect(guildId: string) {
+  logger.debug(`disconnect: guild=${guildId}`);
   await stopAndClear(guildId);
   const q = getQueue(guildId);
   if (q.connection?.connection) q.connection.connection.destroy();
   const p = players.get(guildId);
   if (p) { p.stop(true); players.delete(guildId); }
+  // Clear NP BEFORE removeQueue — clearNP needs npMessageId from queue state.
+  // After removeQueue, getQueue(guildId) creates a blank queue with npMessageId=null.
+  await clearNP(guildId);
   removeQueue(guildId);
+  logger.debug(`disconnect: done`);
 }
 
 export async function reconnectVoiceChannel(member: GuildMember): Promise<VoiceConnection | null> {

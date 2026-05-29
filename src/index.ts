@@ -134,6 +134,7 @@ async function handleButton(interaction: ButtonInteraction) {
       break;
     }
     case 'stop': {
+      logger.debug(`Stop button pressed in guild ${g}`);
       await stopAndClear(g);
       await interaction.editReply({ embeds: [], components: [] }).catch(() => {});
       return;
