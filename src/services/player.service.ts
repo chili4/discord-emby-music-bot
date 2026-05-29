@@ -303,7 +303,7 @@ function getAudioPlayer(guildId: string): AudioPlayer {
           q.currentIndex = -1;
           stopScrobble(guildId);
           stopNpTimer(guildId);
-          await clearNP(guildId);
+          clearNP(guildId).catch(() => {});
           q.processingEnd = false;
           return;
         }
@@ -330,7 +330,7 @@ function getAudioPlayer(guildId: string): AudioPlayer {
             q.currentIndex = -1;
             stopScrobble(guildId);
             stopNpTimer(guildId);
-            await clearNP(guildId);
+            clearNP(guildId).catch(() => {});
           }
           q.processingEnd = false;
           return;
@@ -360,7 +360,7 @@ function getAudioPlayer(guildId: string): AudioPlayer {
           q.currentIndex = -1;
           stopScrobble(guildId);
           stopNpTimer(guildId);
-          await clearNP(guildId);
+          clearNP(guildId).catch(() => {});
         }
         q.processingEnd = false;
       } catch (e) {
@@ -407,7 +407,7 @@ export async function stopAndClear(guildId: string) {
   }
   const ff = ffmpegProcesses.get(guildId);
   if (ff) { ff.kill(); ffmpegProcesses.delete(guildId); }
-  await clearNP(guildId);
+  clearNP(guildId).catch(() => {});
 }
 
 export async function disconnect(guildId: string) {
