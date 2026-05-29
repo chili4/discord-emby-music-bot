@@ -149,10 +149,10 @@ export async function playCurrent(guildId: string, channel?: TextChannel, sendNp
       q.connection.connection.subscribe(player);
     }
 
-    q.skipGuard = false;
-    q.processingEnd = false;
-    q.playerGeneration++;
-
+    // Register Playing listener and play BEFORE resetting guards. This way
+    // the player has already transitioned to the new resource before
+    // processingEnd becomes false, preventing a zombie Idle from the old
+    // resource from entering the handler and advancing the queue.
     player.removeAllListeners('playing');
 
     let timersStarted = false;
@@ -160,16 +160,16 @@ export async function playCurrent(guildId: string, channel?: TextChannel, sendNp
       if (timersStarted) return;
       timersStarted = true;
       q.connection!.playingStartTime = Date.now();
-      // Start NP timer immediately when playback begins so the progress bar
-      // updates from the first second (no 3s gap where position stays at 0).
       startNpTimer(guildId);
-      // Scrobble still needs a small delay to ensure Emby accepts the report.
       setTimeout(() => startScrobble(guildId), 3_000);
     });
 
-    // Play BEFORE awaiting old FFmpeg — the player switches to the new
-    // resource now, so any Idle from the OLD resource is ignored.
     player.play(res);
+
+    // Guards safe to reset now — player is on the new resource.
+    q.skipGuard = false;
+    q.processingEnd = false;
+    q.playerGeneration++;
 
     // Now await old FFmpeg exit (background cleanup — no longer blocks)
     if (oldFf && oldFf.exitCode === null && oldFf.signalCode === null) {
