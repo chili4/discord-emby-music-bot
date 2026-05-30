@@ -77,8 +77,7 @@ async function handleButton(interaction: ButtonInteraction) {
 
   switch (interaction.customId) {
     case 'pause': {
-      // Always snapshot the position, even if playingStartTime is 0
-      // (otherwise the pause offset is silently lost and the position jumps).
+      // Always snapshot the position using current time as fallback
       q.seekOffset += Math.floor((Date.now() - (q.connection?.playingStartTime || Date.now())) / 1000);
       q.connection?.audioPlayer?.pause();
       q.isPaused = true;
@@ -105,9 +104,7 @@ async function handleButton(interaction: ButtonInteraction) {
       break;
     }
     case 'rewind': {
-      if (q.connection?.playingStartTime) {
-        q.seekOffset += Math.floor((Date.now() - q.connection.playingStartTime) / 1000);
-      }
+      q.seekOffset += Math.floor((Date.now() - (q.connection?.playingStartTime || Date.now())) / 1000);
       q.seekOffset = Math.max(0, q.seekOffset - 30);
       q.skipGuard = true;
       if (q.isPaused) {
@@ -120,9 +117,7 @@ async function handleButton(interaction: ButtonInteraction) {
     }
     case 'forward': {
       const dur = getCurrentTrack(g)?.track.duration || 0;
-      if (q.connection?.playingStartTime) {
-        q.seekOffset += Math.floor((Date.now() - q.connection.playingStartTime) / 1000);
-      }
+      q.seekOffset += Math.floor((Date.now() - (q.connection?.playingStartTime || Date.now())) / 1000);
       q.seekOffset = Math.min(Math.max(0, dur - 1), q.seekOffset + 30);
       q.skipGuard = true;
       if (q.isPaused) {

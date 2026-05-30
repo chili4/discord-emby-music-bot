@@ -2,7 +2,6 @@ import { TextChannel, Message, ActionRowBuilder, ButtonBuilder, ComponentType, A
 import { logger } from '../utils/logger';
 import { getQueue, getCurrentTrack, getNextTrack } from './queue.service';
 import { nowPlayingEmbed, getPlaybackButtons } from '../utils/embed';
-import { embyClient } from '../client/emby.client';
 
 async function resolveChannel(guildId: string): Promise<TextChannel | null> {
   const q = getQueue(guildId);
@@ -39,14 +38,7 @@ export async function sendNP(channel: TextChannel, guildId: string): Promise<Mes
   const cur = getCurrentTrack(guildId);
   if (!cur) return null;
 
-  let isFav = cur.track.isFavorite || false;
-  if (!cur.track.isFavorite) {
-    const apiFav = await embyClient.isFavorite(cur.track.id).catch(() => false);
-    if (apiFav) {
-      cur.track.isFavorite = true;
-      isFav = true;
-    }
-  }
+  const isFav = cur.track.isFavorite || false;
   logger.debug(`sendNP: ${cur.track.name} fav=${isFav}`);
   const nextTrack = getNextTrack(guildId);
   const embed = nowPlayingEmbed(cur.track, calcPosition(guildId), q.volume, cur.requestedBy, nextTrack?.track ?? null);
