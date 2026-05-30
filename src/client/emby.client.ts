@@ -142,6 +142,7 @@ export class EmbyClient {
         params: {
           Ids: ids.join(','),
           Limit: ids.length,
+          Fields: 'IsFavorite',
         },
       });
       return res.data.Items || [];
@@ -186,7 +187,7 @@ export class EmbyClient {
   async getPlaylistItems(playlistId: string): Promise<EmbyItem[]> {
     try {
       const res = await this.api.get(`/Playlists/${playlistId}/Items`, {
-        params: { UserId: this.userId },
+        params: { UserId: this.userId, Fields: 'IsFavorite' },
       });
       return res.data.Items || [];
     } catch {
@@ -354,6 +355,7 @@ export class EmbyClient {
           Recursive: true,
           Limit: 200,
           SortBy: 'SortName',
+          Fields: 'IsFavorite',
         },
       });
       return res.data.Items || [];
