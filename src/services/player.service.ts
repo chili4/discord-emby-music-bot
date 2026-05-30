@@ -99,6 +99,9 @@ export async function playCurrent(guildId: string, channel?: TextChannel, sendNp
       '-user_agent', 'VLC/3.0.20',
       '-headers', `X-Emby-Token: ${embyClient.getAccessToken()}\r\n`,
       '-threads', '1',
+      '-fflags', 'nobuffer',
+      '-probesize', '100000',
+      '-analyzeduration', '0',
     ];
     if (q.seekOffset > 0) {
       args.push('-ss', String(q.seekOffset));
