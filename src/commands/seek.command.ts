@@ -29,6 +29,7 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
   }
 
   queue.seekOffset = target;
+  queue.isPaused = false;
 
   const { playCurrent } = await import('../services/player.service');
   await playCurrent(guildId);

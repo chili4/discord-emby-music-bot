@@ -42,7 +42,7 @@ export async function sendNP(channel: TextChannel, guildId: string): Promise<Mes
   logger.debug(`sendNP: ${cur.track.name} fav=${isFav}`);
   const nextTrack = getNextTrack(guildId);
   const embed = nowPlayingEmbed(cur.track, calcPosition(guildId), q.volume, cur.requestedBy, nextTrack?.track ?? null);
-  const rows = getPlaybackButtons(q.isPaused, q.loopMode, isFav);
+  const rows = getPlaybackButtons(q.isPaused, q.loopMode, isFav, cur.track.duration);
 
   // Disable old NP message (remove buttons) so it becomes a static history entry
   const old = await resolveMessage(guildId);
@@ -77,7 +77,7 @@ export async function updateNP(guildId: string, overrideFav?: boolean): Promise<
   const isFav = overrideFav ?? (cur.track.isFavorite || false);
   const nextTrack = getNextTrack(guildId);
   const embed = nowPlayingEmbed(cur.track, calcPosition(guildId), q.volume, cur.requestedBy, nextTrack?.track ?? null);
-  const rows = getPlaybackButtons(q.isPaused, q.loopMode, isFav);
+  const rows = getPlaybackButtons(q.isPaused, q.loopMode, isFav, cur.track.duration);
   await msg.edit({ embeds: [embed], components: rows }).catch(() => {});
 }
 
@@ -121,7 +121,7 @@ export function startNpTimer(guildId: string): void {
   const q = getQueue(guildId);
   q.npTimer = setInterval(() => {
     updateNP(guildId).catch((e) => logger.error(`Timer error: ${e.message}`));
-  }, 1_000);
+  }, 8_000);
 }
 
 export function stopNpTimer(guildId: string): void {

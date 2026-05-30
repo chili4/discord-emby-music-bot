@@ -24,6 +24,10 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
   } else {
     player.pause();
     queue.isPaused = true;
+    if (queue.connection && queue.connection.playingStartTime) {
+      queue.seekOffset += Math.floor((Date.now() - queue.connection.playingStartTime) / 1000);
+      queue.connection.playingStartTime = 0;
+    }
     await interaction.reply({ embeds: [new EmbedBuilder().setColor(0xFEE75C).setDescription('⏸️ Paused')] });
   }
 }

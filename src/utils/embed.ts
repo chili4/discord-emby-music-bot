@@ -3,7 +3,7 @@ import { Track } from '../models/types';
 import { config } from '../config';
 import { embyClient } from '../client/emby.client';
 
-const COLOR = 0x2B2D31;
+const COLOR = 0x52B54B;
 
 function imgUrl(track: Track): string | null {
   if (track.imageTag && track.id) {
@@ -20,10 +20,12 @@ function fmt(sec: number): string {
   return `${m}:${String(s).padStart(2, '0')}`;
 }
 
-function bar(current: number, total: number, len = 14): string {
-  if (total <= 0) return '▱'.repeat(len);
+function bar(current: number, total: number, len = 18): string {
+  if (total <= 0) return '▬'.repeat(len) + '🔘';
   const f = Math.round((current / total) * len);
-  return '▰'.repeat(f) + '▱'.repeat(len - f);
+  if (f === 0) return '🔘' + '▬'.repeat(len);
+  if (f >= len) return '▬'.repeat(len) + '🔘';
+  return '▬'.repeat(f) + '🔘' + '▬'.repeat(len - f);
 }
 
 export function nowPlayingEmbed(track: Track, position: number, volume: number, requestedBy?: string, nextTrack?: Track | null) {
@@ -57,6 +59,7 @@ export function getPlaybackButtons(
   isPaused: boolean,
   loopMode: string,
   isFav: boolean,
+  duration?: number
 ) {
   const loopEmoji = loopMode === 'all' ? '🔁' : loopMode === 'one' ? '🔂' : '➡️';
   const loopStyle = loopMode === 'none' ? ButtonStyle.Secondary : ButtonStyle.Primary;
@@ -82,10 +85,13 @@ export function getPlaybackButtons(
       .setCustomId('seekbar')
       .setPlaceholder('⏩ Seek to position')
       .addOptions(
-        Array.from({ length: 21 }, (_, i) => i * 5).map(p => ({
-          label: `${p}%`,
-          value: String(p),
-        })),
+        Array.from({ length: 21 }, (_, i) => i * 5).map(p => {
+          const time = duration ? ` (${fmt(Math.floor(duration * (p / 100)))})` : '';
+          return {
+            label: `${p}%${time}`,
+            value: String(p),
+          };
+        }),
       ),
   );
 

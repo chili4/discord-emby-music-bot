@@ -77,16 +77,22 @@ async function handleButton(interaction: ButtonInteraction) {
 
   switch (interaction.customId) {
     case 'pause': {
-      // Always snapshot the position using current time as fallback
-      q.seekOffset += Math.floor((Date.now() - (q.connection?.playingStartTime || Date.now())) / 1000);
-      q.connection?.audioPlayer?.pause();
-      q.isPaused = true;
+      if (!q.isPaused) {
+        if (q.connection && q.connection.playingStartTime) {
+          q.seekOffset += Math.floor((Date.now() - q.connection.playingStartTime) / 1000);
+          q.connection.playingStartTime = 0;
+        }
+        q.connection?.audioPlayer?.pause();
+        q.isPaused = true;
+      }
       break;
     }
     case 'resume': {
-      q.connection?.audioPlayer?.unpause();
-      q.isPaused = false;
-      q.connection!.playingStartTime = Date.now();
+      if (q.isPaused) {
+        q.connection?.audioPlayer?.unpause();
+        q.isPaused = false;
+        if (q.connection) q.connection.playingStartTime = Date.now();
+      }
       break;
     }
     case 'next': {
@@ -104,28 +110,24 @@ async function handleButton(interaction: ButtonInteraction) {
       break;
     }
     case 'rewind': {
-      q.seekOffset += Math.floor((Date.now() - (q.connection?.playingStartTime || Date.now())) / 1000);
+      if (!q.isPaused && q.connection?.playingStartTime) {
+        q.seekOffset += Math.floor((Date.now() - q.connection.playingStartTime) / 1000);
+      }
       q.seekOffset = Math.max(0, q.seekOffset - 30);
       q.skipGuard = true;
-      if (q.isPaused) {
-        q.connection!.playingStartTime = Date.now();
-      } else {
-        q.connection!.playingStartTime = Date.now();
-        await playCurrent(g, undefined, false);
-      }
+      q.isPaused = false;
+      await playCurrent(g, undefined, false);
       break;
     }
     case 'forward': {
       const dur = getCurrentTrack(g)?.track.duration || 0;
-      q.seekOffset += Math.floor((Date.now() - (q.connection?.playingStartTime || Date.now())) / 1000);
+      if (!q.isPaused && q.connection?.playingStartTime) {
+        q.seekOffset += Math.floor((Date.now() - q.connection.playingStartTime) / 1000);
+      }
       q.seekOffset = Math.min(Math.max(0, dur - 1), q.seekOffset + 30);
       q.skipGuard = true;
-      if (q.isPaused) {
-        q.connection!.playingStartTime = Date.now();
-      } else {
-        q.connection!.playingStartTime = Date.now();
-        await playCurrent(g, undefined, false);
-      }
+      q.isPaused = false;
+      await playCurrent(g, undefined, false);
       break;
     }
     case 'stop': {
@@ -188,12 +190,8 @@ async function handleSelectMenu(interaction: import('discord.js').StringSelectMe
       const target = Math.floor((pct / 100) * cur.track.duration);
       q.seekOffset = target;
       q.skipGuard = true;
-      if (q.isPaused) {
-        q.connection.playingStartTime = Date.now();
-      } else {
-        q.connection.playingStartTime = Date.now();
-        await playCurrent(g, undefined, false);
-      }
+      q.isPaused = false;
+      await playCurrent(g, undefined, false);
     }
   }
 

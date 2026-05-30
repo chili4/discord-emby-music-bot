@@ -98,8 +98,10 @@ export async function playCurrent(guildId: string, channel?: TextChannel, sendNp
     const args: string[] = [
       '-user_agent', 'VLC/3.0.20',
       '-headers', `X-Emby-Token: ${embyClient.getAccessToken()}\r\n`,
+      '-reconnect', '1',
+      '-reconnect_streamed', '1',
+      '-reconnect_delay_max', '5',
       '-threads', '1',
-      '-fflags', 'nobuffer',
       '-probesize', '500000',
       '-analyzeduration', '1000000',
     ];
@@ -114,7 +116,7 @@ export async function playCurrent(guildId: string, channel?: TextChannel, sendNp
       '-f', 'opus',
       '-ar', '48000',
       '-ac', '2',
-      '-b:a', '128k',
+      '-b:a', '192k',
       'pipe:1',
     );
 
