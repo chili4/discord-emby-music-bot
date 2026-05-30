@@ -106,6 +106,7 @@ export async function playCurrent(guildId: string, channel?: TextChannel, sendNp
     args.push('-i', url);
     args.push(
       '-loglevel', 'warning',
+      '-af', `volume=${Math.pow(q.volume / 100, 0.6)}`,
       '-acodec', 'libopus',
       '-application', 'audio',
       '-f', 'opus',
@@ -139,8 +140,7 @@ export async function playCurrent(guildId: string, channel?: TextChannel, sendNp
       if (stderrBuf.length > 2048) stderrBuf = stderrBuf.slice(-1024);
     });
 
-    const res = createAudioResource(ff.stdout, { inlineVolume: true });
-    res.volume?.setVolume(Math.pow(q.volume / 100, 0.6));
+    const res = createAudioResource(ff.stdout);
     const player = getAudioPlayer(guildId);
     q.connection.audioPlayer = player;
     q.connection.resource = res;
@@ -384,8 +384,9 @@ function getAudioPlayer(guildId: string): AudioPlayer {
 export function setVolume(guildId: string, vol: number) {
   const q = getQueue(guildId);
   q.volume = Math.max(0, Math.min(150, vol));
-  // Apply to current resource instantly (no FFmpeg restart needed with inlineVolume)
-  q.connection?.resource?.volume?.setVolume(Math.pow(q.volume / 100, 0.6));
+  // Volume is applied via FFmpeg -af filter on the next track.
+  // The current track's volume cannot be changed at runtime without
+  // restarting FFmpeg (which causes a gap in audio).
 }
 
 export async function stopAndClear(guildId: string) {
