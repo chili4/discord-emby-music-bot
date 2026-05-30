@@ -105,7 +105,7 @@ export class EmbyClient {
           AlbumId: item.AlbumId,
           ImageTags: item.ImageTags,
           ProductionYear: item.ProductionYear,
-          IsFavorite: !!item.IsFavorite,
+          IsFavorite: item.UserData?.IsFavorite || !!item.IsFavorite,
         }));
         logger.debug(`Items fallback returned ${hints.length} results`);
       }
@@ -233,7 +233,7 @@ export class EmbyClient {
       duration: ticksToSeconds(hint.RunTimeTicks || 0),
       imageTag: hint.PrimaryImageTag || hint.ImageTags?.Primary || null,
       type: this.mapType(hint.Type),
-      isFavorite: !!hint.IsFavorite,
+      isFavorite: (hint as any).UserData?.IsFavorite || !!hint.IsFavorite,
     };
   }
 
@@ -248,7 +248,7 @@ export class EmbyClient {
       imageTag: item.ImageTags?.Primary || null,
       type: this.mapType(item.Type),
       playlistItemId: item.PlaylistItemId,
-      isFavorite: !!item.IsFavorite,
+      isFavorite: item.UserData?.IsFavorite || !!item.IsFavorite,
     };
   }
 

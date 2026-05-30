@@ -38,6 +38,7 @@ export interface EmbyItem {
   MediaSources?: EmbyMediaSource[];
   PlaylistItemId?: string;
   IsFavorite?: boolean;
+  UserData?: { IsFavorite?: boolean };
 }
 
 export interface EmbyMediaSource {
