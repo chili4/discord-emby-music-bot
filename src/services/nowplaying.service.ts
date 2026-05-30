@@ -124,24 +124,12 @@ export async function clearNP(guildId: string): Promise<void> {
   await msg.edit({ components: [] }).catch(() => {});
 }
 
-async function npTick(guildId: string): Promise<void> {
-  const q = getQueue(guildId);
-  if (!q.npTimer) return;
-  try {
-    await updateNP(guildId);
-  } catch (e) {
-    logger.error(`Timer error: ${(e as Error).message}`);
-  }
-  // If the timer was stopped (e.g. playCurrent halted it), don't reschedule.
-  if (q.npTimer) {
-    q.npTimer = setTimeout(() => npTick(guildId), 1_000);
-  }
-}
-
 export function startNpTimer(guildId: string): void {
   stopNpTimer(guildId);
   const q = getQueue(guildId);
-  q.npTimer = setTimeout(() => npTick(guildId), 1_000);
+  q.npTimer = setInterval(() => {
+    updateNP(guildId).catch((e) => logger.error(`Timer error: ${e.message}`));
+  }, 1_000);
 }
 
 export function stopNpTimer(guildId: string): void {
