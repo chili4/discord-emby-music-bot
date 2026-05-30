@@ -108,8 +108,6 @@ export async function playCurrent(guildId: string, channel?: TextChannel, sendNp
       '-loglevel', 'warning',
       '-af', `volume=${Math.pow(q.volume / 100, 0.6)}`,
       '-acodec', 'libopus',
-      '-application', 'lowdelay',
-      '-compression_level', '5',
       '-f', 'opus',
       '-ar', '48000',
       '-ac', '2',
@@ -126,7 +124,7 @@ export async function playCurrent(guildId: string, channel?: TextChannel, sendNp
     if (oldFf) {
       ffmpegProcesses.delete(guildId);
       if (oldFf.exitCode === null && oldFf.signalCode === null) {
-        oldFf.kill();
+        oldFf.kill('SIGKILL');
       }
     }
 
